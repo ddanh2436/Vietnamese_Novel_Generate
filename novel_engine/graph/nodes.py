@@ -79,6 +79,19 @@ def director_node(state: ChapterState, config: RunnableConfig) -> dict:
                                  locations=scene_locs, graph=eng.graph,
                                  epoch_start=eng.epoch_start)
 
+    # Quan hệ: mỗi cặp một chỉ thị, ở cảnh HIỆN TẠI cuối cùng cả hai có mặt.
+    rel_by_scene = eng.graph.relationships.directives_for_chapter(
+        ch, eng.planner, eng.chars, [t.mode for t in times])
+    # Tin tức (§5.6): tin nào chạm tới POV của từng cảnh, theo vị trí THẬT của
+    # các chương đã viết cộng vị trí DỰ KIẾN của chương này.
+    news_by_scene = eng.graph.news.scene_directives(
+        graph=eng.graph, chars=eng.chars, past_frames=eng.store.get_frames(),
+        planned=[{"scene_id": f"CH{ch:03d}_S{si:02d}", "time": times[si],
+                  "location_id": eng.planner.location_id(ch, si),
+                  "present": eng.planner.present_characters(ch, si),
+                  "pov": eng.planner.pov_for(ch, si)}
+                 for si in range(len(beats))])
+
     contracts: list[dict] = []
     for si, beat in enumerate(beats):
         pov = eng.planner.pov_for(ch, si)
@@ -123,6 +136,8 @@ def director_node(state: ChapterState, config: RunnableConfig) -> dict:
             dramatic_question=beat["function"],
             tension=tension,
             plant_directives=plan.for_scene(si),
+            relationship_directives=rel_by_scene.get(si, []),
+            news_directives=news_by_scene.get(si, []),
             lore_integration=eng.graph.faction_tensions(
                 eng.planner.location_id(ch, si), ch),
             subtext_requirement="",
@@ -185,8 +200,8 @@ def writer_node(state: ChapterState, config: RunnableConfig) -> dict:
         "pressure_type": c["tension"].get("pressure_type", ""),
         "plant_directives": "\n".join(
             _plant_brief(d) for d in c["plant_directives"]) or "(không có)",
-        "relationship_directives": _bullets(
-            [str(d) for d in c["relationship_directives"]]) or "(không có)",
+        "relationship_directives": "\n".join(
+            _relationship_brief(d) for d in c["relationship_directives"]) or "(không có)",
         "word_min": c["word_budget"][0], "word_max": c["word_budget"][1],
         "max_explicit_goal_statements": c["max_explicit_goal_statements"],
         "sensory_channels_required": c["sensory_channels_required"],
@@ -196,6 +211,8 @@ def writer_node(state: ChapterState, config: RunnableConfig) -> dict:
         "recent_chapters": _bullets(ctx["recent_chapters"]) or "(chưa có)",
         "arc_history": _bullets(ctx["arc_history"]) or "(chưa có)",
         "known_facts": _bullets(render_facts(ctx["known_facts"])) or "(chưa có)",
+        "news": "\n".join(_news_brief(d) for d in c.get("news_directives", []))
+                or "(không có)",
         "feedback": feedback,
     }), role="writer")
 
@@ -544,6 +561,37 @@ def _plant_brief(d: dict) -> str:
             f"mode {d.get('mode')}\n  instruction: {d.get('instruction')}")
 
 
+def _relationship_brief(d: dict) -> str:
+    """Chỉ thị quan hệ cho Writer. KHÔNG có chỉ số hay lý do guard (chứa con số):
+    NT-7 — Writer viết để thoả con số nếu thấy con số."""
+    a, b = d.get("names") or [d.get("a"), d.get("b")]
+    line = f"- {a} ↔ {b}: đang ở giai đoạn “{d.get('stage_vi')}”."
+    if d.get("action") == "advance":
+        line += (f" Cảnh này là bước sang “{d.get('to_vi')}”.\n"
+                 f"  scene_requirement: {d.get('scene_requirement')}")
+    return line + f"\n  CHƯA được: {d.get('not_yet')}"
+
+
+def _news_brief(d: dict) -> str:
+    """Tin cho Writer. Bản méo mang `truth` dưới nhãn CHỈ ĐẠO DIỄN BIẾT — Writer
+    cần bản thật để méo đúng toán tử, cùng khuôn với `hidden_action` (§5.4.1)."""
+    kenh = d.get("channel_vi") or d.get("channel")
+    if d.get("kind") == "correction_rejected":
+        return (f"- Người kể nghe bản CẢI CHÍNH qua {kenh} nhưng KHÔNG TIN, giữ niềm "
+                f"tin cũ. Để sự cứng đầu lộ qua hành động, không qua độc thoại giải thích.\n"
+                f"  [CHỈ ĐẠO DIỄN BIẾT] nội dung cải chính: {d.get('truth')}")
+    if d.get("ops"):
+        line = (f"- Người kể nghe qua {kenh} một bản ĐÃ BIẾN DẠNG "
+                f"({', '.join(d.get('ops_vi', []))}) và TIN nó.\n"
+                f"  [CHỈ ĐẠO DIỄN BIẾT] bản thật: {d.get('truth')}\n"
+                f"  Viết đúng bản méo người kể nghe. KHÔNG để lộ bản thật.")
+    else:
+        line = f"- Người kể nghe qua {kenh}: {d.get('truth')}"
+    if d.get("kind") == "correction_accepted":
+        line += "\n  Đây là beat ĐÍNH CHÍNH: người kể nhận ra điều mình tin trước đó sai."
+    return line
+
+
 def _debt_brief(debt: dict) -> str:
     parts = []
     for key, label in (("overdue", "quá hạn"), ("late_to_plant", "trễ hạn cài"),
@@ -679,6 +727,13 @@ def extractor_node(state: ChapterState, config: RunnableConfig) -> dict:
     dropped: list[dict] = []
     delta = merge_extractions(audited, emergent, chapter=state["chapter"],
                               repair_llm=eng.llm, dropped=dropped)
+    if delta.relationship_updates:
+        # NT-13: trạng thái quan hệ do CODE tính từ sự kiện. Bản chụp trạng thái
+        # LLM viết (kể cả `stage`) không bao giờ vào canon — ghi lại rồi bỏ.
+        dropped.append({"source": "merge", "field": "relationship_updates",
+                        "action": "dropped", "reason": "llm_state_snapshot_ignored",
+                        "item": f"{len(delta.relationship_updates)} mục"})
+        delta.relationship_updates = []
     if vocab is not None:
         # Quy bí danh về tên chuẩn TRƯỚC khi sinh khoá phân loại (khoá chứa
         # `predicate`). Việc đổi tên được ghi lại, không làm im lặng.
@@ -755,7 +810,10 @@ def _contracts_brief_for_extract(contracts: list[dict]) -> str:
         else:
             lines.append("  plant_directives: (không có)")
         if c.get("relationship_directives"):
-            lines.append(f"  relationship_directives: {c['relationship_directives']}")
+            lines.append("  relationship_directives:")
+            for d in c["relationship_directives"]:
+                buoc = f" → {d.get('to')}" if d.get("action") == "advance" else ""
+                lines.append(f"    - {d.get('a')} ↔ {d.get('b')}: {d.get('stage')}{buoc}")
         co_mat = []
         for x in c["active_characters"]:
             m = f"{x['id']}"

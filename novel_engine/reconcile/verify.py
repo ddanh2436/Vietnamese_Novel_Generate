@@ -126,6 +126,12 @@ def verify_spans(delta: StateDelta, prose: str,
         if not ok:
             rejected.append({"reason": f"plant_{why}", "clue_id": pe.clue_id,
                              "span": pe.span})
+    for ev in delta.relationship_events:
+        ok, why = _found(ev.span, hay, min_len)
+        ev.verified = ok
+        if not ok:
+            rejected.append({"reason": f"relationship_{why}", "pair": f"{ev.a}|{ev.b}",
+                             "kind": ev.kind, "span": ev.span})
     return delta, rejected
 
 
@@ -294,6 +300,10 @@ def merge_extractions(audited_json: str, emergent_json: str, chapter: int,
             by_pair[(u.a, u.b)] = u
     a.relationship_updates = list(by_pair.values())
 
+    ev_seen = {(tuple(sorted((x.a, x.b))), x.kind, x.span) for x in a.relationship_events}
+    a.relationship_events += [x for x in e.relationship_events
+                              if (tuple(sorted((x.a, x.b))), x.kind, x.span) not in ev_seen]
+
     # `plant_evidence` chỉ lượt 1 sinh ra — lượt 2 không biết kế hoạch là gì.
     return a.stamp(chapter)
 
@@ -359,4 +369,13 @@ def assign_scenes(delta: StateDelta, scenes: list[dict],
                           "clue_id": pe.clue_id, "from": pe.scene_id,
                           "to": hit[1]})
             pe.scene_id = hit[1]
+    for ev in delta.relationship_events:
+        # Cảnh quyết định sự kiện có thuộc hồi ức không — và sự kiện hồi ức
+        # không được cộng vào quan hệ HIỆN TẠI.
+        hit = locate(ev.span)
+        if isinstance(hit, tuple) and ev.scene_id != hit[1]:
+            notes.append({"reason": "relationship_scene_reassigned",
+                          "pair": f"{ev.a}|{ev.b}", "kind": ev.kind,
+                          "from": ev.scene_id, "to": hit[1]})
+            ev.scene_id = hit[1]
     return notes

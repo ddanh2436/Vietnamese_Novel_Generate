@@ -18,6 +18,10 @@ fatal_flaw:
   cost_already_paid:
     - "ký lệnh trục xuất một gia đình thợ mỏ vì thiếu một con dấu"
   arc_direction: heals
+  # Trốn sau quy trình: chỉ tin kênh chính thống; tin trái công báo thì cưỡng lại.
+  correction_resistance: 0.2
+  resists_tags: ["contradicts_official"]
+  channel_trust: {courier: 0.95, signal: 0.9, rumor: 0.1}
 
 private_agenda: >
   Ông đã bán ba giấy phép quá cảnh cho người của Lõi Rạng, không phải vì tiền

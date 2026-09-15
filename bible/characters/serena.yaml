@@ -19,6 +19,9 @@ fatal_flaw:
     - "huỷ lời khai có lợi cho Kaelen, khiến anh bị lưu đày"
     - "để một kỹ thuật viên ca trực nhận kỷ luật thay"
   arc_direction: deepens
+  # Thẩm vấn viên: tin đồn gần như vô giá trị, tín hiệu nội bộ thì tin.
+  correction_resistance: 0.1
+  channel_trust: {rumor: 0.15, signal: 0.9}
 
 private_agenda: >
   Cô đang lặng lẽ tìm và tiêu huỷ mọi bản lưu của lệnh xả áp — không để che

@@ -1,0 +1,39 @@
+# Trạng thái quan hệ LÚC MỞ TRUYỆN (§7.1). Đầu vào của TÁC GIẢ.
+#
+# Chỉ số 0–100. Hệ thống không bao giờ sửa file này: mọi thay đổi sau đó là sự
+# kiện trích từ văn xuôi, fold vào canon (§3.1). Cặp không khai ở đây bắt đầu
+# từ STRANGERS với mọi chỉ số bằng 0 khi họ gặp nhau lần đầu.
+#
+# `chapters_in_stage: 0` cho mọi cặp: lịch sử trước truyện đặt ĐIỂM XUẤT PHÁT,
+# không trả trước thời gian chờ. Guard MIN_CHAPTERS_IN_STAGE đếm từ Chương 1.
+
+relationships:
+  # Serena huỷ lời khai có lợi cho Kaelen, khiến anh bị lưu đày; Kaelen từng đẩy
+  # cô ra khi cô định làm chứng. Hai người hiểu nhau hơn ai hết — và chữ ký thứ
+  # ba đặt mục tiêu của họ loại trừ nhau trước cả khi truyện mở.
+  - a: CHAR_KAELEN
+    b: CHAR_SERENA
+    stage: friction
+    intimacy: 30
+    friction: 40
+    stake_conflict: 35
+    shared_ordeals:
+      - "trước truyện: đêm vụ nổ Lò 3"
+    unresolved_debts:
+      - "lời khai bị huỷ — anh chưa từng hỏi vì sao"
+
+  # Vhal biết Kaelen định đi đâu; Kaelen coi ông ta là một con dấu biết nói.
+  - a: CHAR_KAELEN
+    b: CHAR_VHAL
+    stage: strangers
+    intimacy: 5
+    friction: 10
+    stake_conflict: 15
+
+  # Serena nắm thóp Vhal (ba giấy phép bán cho Lõi Rạng); Vhal không nhận ra.
+  - a: CHAR_SERENA
+    b: CHAR_VHAL
+    stage: strangers
+    intimacy: 3
+    friction: 18
+    stake_conflict: 30

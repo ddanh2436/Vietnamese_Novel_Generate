@@ -1,0 +1,40 @@
+# Tin tức (§5.6) — sự kiện ở một nơi, lan theo tuyến đường của world.yaml.
+#
+# Đầu vào của TÁC GIẢ: tin gì phát ra, ở đâu, lúc nào (epoch tick), qua kênh
+# nào, ai bịt. Ai nghe được, bản nào, lúc nào — hệ thống tính, tất định.
+#
+# `tags` cho `fatal_flaw.resists_tags` so khớp: một bằng chứng gỡ tội cho Kaelen
+# là `exculpates:CHAR_KAELEN`.
+
+# Ghi đè cấu hình kênh mặc định. Kênh tín hiệu thuộc Mật Văn — phe nào nắm kênh
+# thì bịt được tin (§5.6.5: thông tin là tài nguyên chiến lược).
+channels:
+  signal:
+    controlled_by: FACT_CIPHER
+
+news:
+  - news_id: NEWS_KAELEN_RETURNS
+    origin_location: LOC_ORE_PORT
+    origin_tick: 20001
+    truth: "Kaelen đã trở về Cảng Quặng sau hai năm lưu đày"
+    subject_entities: [CHAR_KAELEN]
+    channels: [courier, rumor]
+
+  # Mật Văn bịt tin: kênh tín hiệu của chính họ bị bỏ, và tuyến qua khu Thánh
+  # đường (do họ chặn) không mang được tin này.
+  - news_id: NEWS_CORE_HATCH_OPENED
+    origin_location: LOC_REACTOR_3
+    origin_tick: 20030
+    truth: "Khoang Lõi ở Lò 3 bị mở trái phép trong đêm"
+    subject_entities: [LOC_REACTOR_3, CHAR_KAELEN]
+    channels: [courier, rumor, signal]
+    suppressed_by: [FACT_CIPHER]
+    tags: ["incriminates:CHAR_KAELEN"]
+
+  - news_id: NEWS_LOGS_OVERWRITTEN
+    origin_location: LOC_RUINED_CATHEDRAL
+    origin_tick: 20040
+    truth: "Kiểm toán viên Tổng Cục xác nhận nhật ký Lò 3 bị ghi đè từ chính phòng điều khiển"
+    subject_entities: [CHAR_KAELEN, FACT_ARCLIGHT]
+    channels: [courier, signal, rumor]
+    tags: ["exculpates:CHAR_KAELEN", "contradicts_official"]

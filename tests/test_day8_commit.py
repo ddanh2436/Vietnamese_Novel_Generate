@@ -96,10 +96,14 @@ def test_loi_noi_doi_KHONG_thanh_niem_tin_cua_nguoi_noi(eng):
         _a("FACT_CIPHER", "status", "dissolved",
            "— Tổng Cục Mật Văn đã bị giải thể, — Serena nói.",
            "claimed_by", "CHAR_SERENA")]).stamp(1)
-    truoc = len(eng.chars["CHAR_SERENA"].beliefs)
+    # Từ Ngày 13, commit còn dựng lại tri thức TIN TỨC (§5.6) — nguồn `news:` —
+    # nên chỉ đếm những niềm tin KHÔNG đến từ tin tức.
+    def khong_tu_tin_tuc(p):
+        return [b for b in p.beliefs if not b.source.startswith("news:")]
+    truoc = len(khong_tu_tin_tuc(eng.chars["CHAR_SERENA"]))
     reconcile(d, eng)
     serena = eng.chars["CHAR_SERENA"]
-    assert len(serena.beliefs) == truoc
+    assert len(khong_tu_tin_tuc(serena)) == truoc
     assert not any("dissolved" in b.proposition for b in serena.beliefs)
 
 

@@ -86,6 +86,13 @@ class Flaw(BaseModel):
     trigger_conditions: list[str]
     cost_already_paid: list[str] = Field(default_factory=list)
     arc_direction: Literal["deepens", "heals", "transmutes", "static"]
+    # §5.6.6 — kháng cự đính chính, do TÁC GIẢ khai bằng số. §5.6.6 tra
+    # `FLAW_RESISTANCE[fatal_flaw.name]` bằng tên ("sợ bị phản bội"...) mà không
+    # nhân vật nào mang, nên kháng cự bằng 0 với mọi người. Tên là văn xuôi,
+    # không phải khoá.
+    correction_resistance: float = Field(default=0.0, ge=0.0, le=0.6)
+    resists_tags: list[str] = Field(default_factory=list)   # "{self}" = mã nhân vật
+    channel_trust: dict[str, float] = Field(default_factory=dict)
 
 
 class BeliefState(BaseModel):

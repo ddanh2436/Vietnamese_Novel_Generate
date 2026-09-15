@@ -220,6 +220,13 @@ class FakeLLM:
                  "confidence": 0.7, "epistemic": "claimed_by",
                  "holder": chars[-1] if chars else "CHAR_VHAL"},
             ],
+            # Một sự kiện quan hệ có span THẬT, để sổ quan hệ được fold thật ở
+            # mọi lượt chạy — cùng lý do với span bịa ở trên.
+            "relationship_events": [
+                {"a": chars[0], "b": chars[1], "kind": "shared_ordeal",
+                 "actor": None, "scene_id": scene_ids[0],
+                 "span": cau[(n + 7) % len(cau)]}
+            ] if len(chars) >= 2 else [],
             "plant_evidence": [
                 {"clue_id": cid, "scene_id": scene_ids[0],
                  "span": cau[(n + i) % len(cau)], "carrier_used": "setting"}

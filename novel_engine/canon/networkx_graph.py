@@ -77,6 +77,15 @@ class NetworkXGraph:
         self.routes = nx.DiGraph()          # UNIFIED ROUTE GRAPH — địa lý
         self.clues: dict[str, Clue] = {}
         self._used_forms: dict[str, list[str]] = {}
+        # Sổ quan hệ nhân vật (§7) — một phần của WorldState, fold như mọi thứ
+        # khác. Import cục bộ: relationship.* import ngược canon.models.
+        from novel_engine.relationship.book import RelationshipBook
+        self.relationships = RelationshipBook()
+        # Tin tức (§5.6): danh mục tin + tri thức đã lan tới nhân vật, dựng
+        # lại mỗi lần chốt chương (`world.news.settle_news`).
+        from novel_engine.world.news import NewsDispatcher
+        self.news = NewsDispatcher()
+        self.news_knowledge: dict[tuple[str, str], dict] = {}
         # F6: niềm tin KHÔNG được nằm chung với sự thật khách quan.
         self.beliefs: list[dict] = []
         # Sự thật khách quan đã chốt: (subject, predicate) → object
@@ -262,6 +271,17 @@ class NetworkXGraph:
                     suspected.append({"id": dst, "name": name,
                                       "certainty": "suspected",
                                       "conf": d.get("weight", 0.5)})
+
+        # Tin đã lan tới (§5.6). Tên hiển thị là BẢN NHÂN VẬT GIỮ tại mốc này,
+        # không phải sự thật: người nghe bản méo mà thấy `truth` trong ngữ cảnh
+        # là rò rỉ POV. Tri thức khoá theo epoch như mọi thứ khác (NT-6).
+        for (cid, nid), k in sorted(self.news_knowledge.items()):
+            if cid != pov_id:
+                continue
+            seen = [v for v in k["timeline"] if v["tick"] <= epoch_tick]
+            if seen:
+                known.append({"id": nid, "name": seen[-1]["render"],
+                              "certainty": "heard"})
 
         clues_held = [
             {"id": c.clue_id,

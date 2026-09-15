@@ -19,6 +19,9 @@ fatal_flaw:
     - "từ chối luật sư biện hộ ở phiên xử, nên bị lưu đày thay vì quản thúc"
     - "đẩy Serena ra khi cô định làm chứng cho anh"
   arc_direction: transmutes
+  # Bằng chứng gỡ tội bị bác bỏ bằng một chi tiết kỹ thuật (distortion_rule).
+  correction_resistance: 0.35
+  resists_tags: ["exculpates:{self}"]
 
 private_agenda: >
   Nếu tìm được chữ ký thứ ba, anh định công bố nó ở nơi đông người nhất —

@@ -183,6 +183,33 @@ class PlantEvidence(BaseModel):
                                     # nhìn thấy; dùng để chặn lộ bài sớm
 
 
+REL_EVENT_KINDS = (
+    "acted_against_own_interest_for_other", "shared_ordeal", "verbal_affection_only",
+    "sacrifice", "betrayal", "value_clash", "reconciled_method",
+    "interests_collide", "interests_align",
+)
+
+
+class RelationshipEvent(BaseModel):
+    """Một SỰ KIỆN quan hệ trên trang giấy (§7.3) — thứ Extractor được khai.
+
+    Không có điểm số, không có giai đoạn: `relationship.dynamics.EFFECTS` là nơi
+    DUY NHẤT biến sự kiện thành chỉ số (NT-1, NT-11). Cùng kỷ luật với
+    `PlantEvidence`: `span` nguyên văn, `verified` do `verify_spans` đặt,
+    `scene_id` do `assign_scenes` sửa theo vị trí span (NT-13).
+    """
+    a: str
+    b: str
+    kind: Literal[
+        "acted_against_own_interest_for_other", "shared_ordeal", "verbal_affection_only",
+        "sacrifice", "betrayal", "value_clash", "reconciled_method",
+        "interests_collide", "interests_align"]
+    actor: str | None = None        # ai hành động (bất đối xứng intimacy)
+    span: str
+    scene_id: str = ""
+    verified: bool = False          # do verify_spans() đặt, KHÔNG do LLM
+
+
 def item_key(item: Entity | Relation | Assertion) -> str:
     """Khoá định danh ổn định cho một phần tử của StateDelta (§11).
 
@@ -224,6 +251,9 @@ class StateDelta(BaseModel):
     clue_transitions: dict[str, ClueStatus] = Field(default_factory=dict)
     relationship_updates: list["RelationshipState"] = Field(default_factory=list)
     plant_evidence: list[PlantEvidence] = Field(default_factory=list)
+    # Sự kiện quan hệ — thứ DUY NHẤT sổ quan hệ đọc. `relationship_updates`
+    # ở trên là trạng thái do LLM viết và không bao giờ được áp (§7).
+    relationship_events: list[RelationshipEvent] = Field(default_factory=list)
 
     # Kết quả phân loại ở Tầng 5
     classification: dict[str, Literal["contradiction", "enrichment",

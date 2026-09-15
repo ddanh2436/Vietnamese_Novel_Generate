@@ -62,6 +62,8 @@ class SceneContract(BaseModel):
     relationship_directives: list[dict] = Field(default_factory=list)
     plant_directives: list[dict] = Field(default_factory=list)
     lore_integration: list[dict] = Field(default_factory=list)
+    # Chủ sở hữu: NewsDispatcher (§5.6) qua Director. Tin POV nghe TRONG cảnh này.
+    news_directives: list[dict] = Field(default_factory=list)
 
     # v2: ràng buộc văn phong đo được
     word_budget: tuple[int, int] = (900, 1600)

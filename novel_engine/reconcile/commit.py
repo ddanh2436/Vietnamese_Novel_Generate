@@ -39,6 +39,7 @@ from novel_engine.reconcile.classify import (
 from novel_engine.reconcile.replan import replan_downstream
 from novel_engine.canon.models import ClueStatus
 from novel_engine.foreshadow.scheduler import decay
+from novel_engine.world.news import chapter_end_tick, settle_news
 
 DEFAULT_PLANT_INTENSITY = 0.6
 
@@ -172,6 +173,15 @@ def apply_delta(delta: StateDelta, graph, chars: dict, frames) -> dict:
         if status.value == "planted" and clue.planted_in_chapter is None:
             clue.planted_in_chapter = ch
         applied["clue_transitions"] += 1
+
+    # Quan hệ nhân vật (§7.2–7.3): chỉ SỰ KIỆN đã xác minh. `relationship_updates`
+    # — trạng thái do LLM viết, kể cả `stage` — không bao giờ được đọc.
+    book = getattr(graph, "relationships", None)
+    if book is not None:
+        rel = book.settle(ch, delta.relationship_events, _as_frames(frames), chars)
+        applied["relationship_events"] = rel["applied"]
+        applied["relationship_skipped"] = rel["skipped"]
+        applied["relationship_transitions"] = rel["transitions"]
 
     return applied
 
@@ -312,6 +322,9 @@ def reconcile(delta: StateDelta, eng, frames=None, contracts=None) -> dict:
             result["plan_patches"] = [patch.model_dump()]
 
     result["applied"] = apply_delta(delta, eng.graph, eng.chars, frames)
+    # Tin tức: dựng lại tri thức tới cuối chương này, trên vị trí THẬT của nhân vật.
+    result["news"] = settle_news(eng.graph, eng.chars, eng.store.get_frames(),
+                                 upto_tick=chapter_end_tick(frames))
     delta.committed = True
     eng.store.append_delta(delta)
     result["status"] = "committed"
@@ -322,6 +335,9 @@ def replay_committed(graph, chars: dict, store) -> int:
     """Fold mọi delta đã ghi vào graph vừa nạp từ bible. Trả số delta đã áp."""
     deltas = store.get_deltas(committed_only=True)
     deltas.sort(key=lambda d: (store.tick_of_chapter(d.chapter), d.chapter))
+    all_frames = store.get_frames()
     for d in deltas:
-        apply_delta(d, graph, chars, store.get_frames(d.chapter))
+        own = store.get_frames(d.chapter)
+        apply_delta(d, graph, chars, own)
+        settle_news(graph, chars, all_frames, upto_tick=chapter_end_tick(own))
     return len(deltas)

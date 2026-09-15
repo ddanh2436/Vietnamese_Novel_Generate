@@ -27,7 +27,8 @@ import json
 from pydantic import ValidationError
 
 from novel_engine.canon.models import (
-    Assertion, ClueStatus, Entity, PlantEvidence, Relation, StateDelta,
+    Assertion, ClueStatus, Entity, PlantEvidence, Relation, RelationshipEvent,
+    StateDelta,
 )
 from novel_engine.llm.json_io import parse_model, strip_fences
 from novel_engine.relationship.models import RelationshipState
@@ -53,6 +54,19 @@ _LIST_FIELDS = {
     "assertions": Assertion,
     "plant_evidence": PlantEvidence,
     "relationship_updates": RelationshipState,
+    "relationship_events": RelationshipEvent,
+}
+
+# Đồng nghĩa HIỂN NHIÊN của loại sự kiện quan hệ. Bảng cố định như KIND_SYNONYMS:
+# thứ không có trong bảng thì bị loại, không bị đoán.
+REL_KIND_SYNONYMS: dict[str, str] = {
+    "sacrificed": "sacrifice", "self_sacrifice": "sacrifice",
+    "betrayed": "betrayal", "treachery": "betrayal",
+    "ordeal": "shared_ordeal", "shared_hardship": "shared_ordeal",
+    "disagreement": "value_clash", "argument": "value_clash", "conflict": "value_clash",
+    "reconciliation": "reconciled_method",
+    "affection": "verbal_affection_only",
+    "protected_other": "acted_against_own_interest_for_other",
 }
 
 
@@ -95,6 +109,15 @@ def parse_delta_lenient(raw: str, repair_llm=None,
                                        "reason": f"kind '{k}' → '{KIND_SYNONYMS[k]}'",
                                        "item": _brief(it)})
                         it = {**it, "kind": KIND_SYNONYMS[k]}
+                elif field == "relationship_events":
+                    k = str(it.get("kind", "")).strip().lower()
+                    if k in REL_KIND_SYNONYMS:
+                        issues.append({"source": source, "field": field,
+                                       "index": i, "action": "coerced",
+                                       "reason": f"kind '{k}' → '{REL_KIND_SYNONYMS[k]}'",
+                                       "item": _brief(it)})
+                        it = {**it, "kind": REL_KIND_SYNONYMS[k]}
+                    it = {k2: v for k2, v in it.items() if k2 != "verified"}
                 elif field == "assertions":
                     # NT-13: `chapter`/`scene` là metadata của hệ thống — model
                     # hay bỏ trống, `stamp()` sẽ điền `chapter` sau.

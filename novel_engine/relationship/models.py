@@ -30,6 +30,9 @@ class RelationshipState(BaseModel):
     stage_entered_chapter: int = 0
     chapters_in_stage: int = 0
     last_counted_chapter: int | None = None   # chống đếm theo cảnh (C7)
+    # Chương đã CHỐT (áp sự kiện + xét guard). Fold chạy lại một delta, hay
+    # một chương được chốt hai lần, không được cộng dồn hai lần.
+    last_settled_chapter: int | None = None
     history: list[dict] = Field(default_factory=list)
 
     @property

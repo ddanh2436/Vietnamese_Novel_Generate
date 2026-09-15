@@ -82,6 +82,11 @@ Không quá 3 câu trong cảnh được mở đầu bằng "Khi", "Trong khi" h
 Subtext: {subtext_requirement}
 Cụm từ bị cấm trong cảnh này: {forbidden_cliches}
 
+## TIN TỨC NGƯỜI KỂ VỪA NGHE
+{news}
+Tin chỉ đến qua kênh ghi kèm (người đưa tin, tin đồn, tín hiệu, đoàn buôn). Cho
+người kể NHẬN tin ngay trong cảnh, không kể lại như điều đã biết từ trước.
+
 ## BỐI CẢNH ĐÃ XẢY RA
 Cảnh liền trước: {recent_scenes}
 Các chương gần đây: {recent_chapters}
@@ -296,6 +301,16 @@ Xuất một JSON đúng schema StateDelta:
   cho cảnh đó. `clue_id` phải là mã CLUE_* có trong kế hoạch — mã cảnh dạng
   CH…_S… KHÔNG phải clue_id. Kế hoạch không có manh mối nào thì
   `plant_evidence` là danh sách rỗng, và đó là câu trả lời đúng.
+- Với tương tác ĐÁNG KỂ giữa hai nhân vật, xuất `relationship_events`: mỗi mục
+  gồm `a`, `b` (mã CHAR_*), `kind`, `actor` (ai hành động, nếu có), `scene_id`,
+  `span` nguyên văn. `kind` CHỈ là một trong: acted_against_own_interest_for_other,
+  shared_ordeal, verbal_affection_only, sacrifice, betrayal, value_clash,
+  reconciled_method, interests_collide, interests_align.
+  KHÔNG xuất điểm số hay giai đoạn quan hệ — hệ thống tự tính.
+  `sacrifice` chỉ khi mất mát KHÔNG đảo ngược được. `betrayal` chỉ khi người kể
+  khẳng định, không phải khi một nhân vật nghi ngờ. `interests_collide/align`
+  chỉ khi HOÀN CẢNH bên ngoài đổi, không vì một cuộc nói chuyện. Lời ngọt ngào
+  không kèm hành động là `verbal_affection_only`. Không có thì danh sách rỗng.
 
 Chỉ xuất JSON.
 """

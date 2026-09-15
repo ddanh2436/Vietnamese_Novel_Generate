@@ -278,6 +278,13 @@ def cmd_status(args) -> int:
               f"{'sạch' if not findings else str(len(findings)) + ' vi phạm'}")
         for f in findings[:8]:
             print(f"    [{f['severity']}] {f['message']}")
+        book = getattr(eng.graph, "relationships", None)
+        if book is not None and book.states:
+            print("\n  quan hệ:")
+            for k, st in sorted(book.states.items()):
+                print(f"    {k:<26} {st.stage.value:<13} {st.chapters_in_stage} chương · "
+                      f"gắn kết {st.intimacy:.0f} · va chạm {st.friction:.0f} · "
+                      f"xung đột lợi ích {st.stake_conflict:.0f} · sẹo {len(st.scars)}")
         return 0
     finally:
         eng.store.close()
@@ -438,6 +445,15 @@ def cmd_commit(args) -> int:
               f"{a['relations']} quan hệ · {a['truths']} sự thật · "
               f"{a['beliefs']} niềm tin · {a['claims']} lời khai · "
               f"{a['retracted']} quan hệ đóng · {a['clues_touched']} manh mối")
+        if a.get("relationship_events") or a.get("relationship_transitions"):
+            print(f"  quan hệ: {a.get('relationship_events', 0)} sự kiện · "
+                  f"{len(a.get('relationship_skipped', []))} bị bỏ")
+        nw = res.get("news") or {}
+        if nw.get("records"):
+            print(f"  tin tức: {nw['records']} bản ghi tri thức · "
+                  f"{nw['rejected']} lần từ chối đính chính")
+        for t in a.get("relationship_transitions", []):
+            print(f"  ♦ {t['pair']}: {t['from']} → {t['to']} — {t['reason'][:90]}")
         if any(x.get("reason") == "empty_extraction"
                for x in delta.extraction_issues):
             print(f"  ⚠ trích xuất RỖNG — canon không nhận thêm sự thật nào từ "

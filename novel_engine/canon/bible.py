@@ -79,4 +79,14 @@ def load_bible(bible_dir: Path | str = DEFAULT_BIBLE
     for rel in world.get("relations", []):
         g.upsert_relation(Relation(provenance="author", **rel))
 
+    # 6. Quan hệ nhân vật (§7.1) — ĐIỂM XUẤT PHÁT. Mọi thay đổi sau đó là sự
+    # kiện trích từ văn xuôi, fold từ delta; file bible không bao giờ bị sửa.
+    from novel_engine.relationship.book import RelationshipBook
+    g.relationships = RelationshipBook.from_bible(bible_dir)
+
+    # 7. Tin tức (§5.6) — tin do tác giả khai; ai nghe, bản nào, lúc nào thì
+    # hệ thống tính khi chốt chương.
+    from novel_engine.world.news import NewsDispatcher
+    g.news = NewsDispatcher.from_bible(bible_dir)
+
     return g, chars, meta
