@@ -443,10 +443,15 @@ def extractor_node(state: ChapterState, config: RunnableConfig) -> dict:
     # Truyền văn xuôi ĐÃ GẮN NHÃN CẢNH, để `PlantEvidence.scene_id` là DỮ LIỆU
     # chứ không phải phỏng đoán của model.
     labelled = "\n\n".join(f"[{s['scene_id']}]\n{s['prose']}" for s in scenes)
+    vocab = getattr(eng, "vocabulary", None)
+    predicates = (vocab.render_for_prompt() if vocab is not None
+                  else "(bible chưa khai predicates.yaml — dùng khoá tiếng Anh "
+                       "snake_case cho thuộc tính bền)")
     audited = eng.llm.invoke(EXTRACT_DIFF_TMPL.format_map({
         "contracts": _contracts_brief_for_extract(contracts),
         "chapter": state["chapter"],
         "prose": labelled,
+        "predicates": predicates,
     }), role="extractor_diff")
 
     # LƯỢT 2 — QUÉT PHÁT SINH. KHÔNG đưa contract vào: model bị neo vào kế
@@ -455,18 +460,30 @@ def extractor_node(state: ChapterState, config: RunnableConfig) -> dict:
         "chapter": state["chapter"],
         "prose": full_prose,
         "known_entities": _entity_index_brief(eng.graph.entity_index()),
+        "predicates": predicates,
     }), role="extractor_emergent")
 
     dropped: list[dict] = []
     delta = merge_extractions(audited, emergent, chapter=state["chapter"],
                               repair_llm=eng.llm, dropped=dropped)
+    if vocab is not None:
+        # Quy bí danh về tên chuẩn TRƯỚC khi sinh khoá phân loại (khoá chứa
+        # `predicate`). Việc đổi tên được ghi lại, không làm im lặng.
+        from novel_engine.canon.vocabulary import normalize_predicates
+        dropped.extend(normalize_predicates(delta, vocab))
 
     # LƯỢT 3 — XÁC MINH SPAN trên TOÀN BỘ văn xuôi của chương.
     delta, rejected = verify_spans(delta, full_prose)
+    # Chỉ số cảnh là metadata của hệ thống (NT-13): suy từ VỊ TRÍ span trong
+    # văn xuôi từng cảnh, không tin số model khai. Sai cảnh nghĩa là sai mốc
+    # epoch, và mệnh đề của cảnh hồi ức thoát khỏi kiểm tra hồi ức.
+    from novel_engine.reconcile.verify import assign_scenes
+    scene_notes = assign_scenes(delta, scenes)
     coverage = plan_coverage(contracts, delta, known_clues=set(eng.graph.clues))
 
     issues = ([{"stage": "parse", **i} for i in dropped]
               + [{"stage": "verify", **r} for r in rejected]
+              + [{"stage": "scene", **n} for n in scene_notes]
               + [{"stage": "plan", "reason": "phantom_plant_evidence", **p}
                  for p in coverage["phantom_evidence"]])
     so_tu = len(full_prose.split())

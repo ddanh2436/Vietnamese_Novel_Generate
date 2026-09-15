@@ -24,6 +24,7 @@ from novel_engine.memory.assembler import ContextAssembler
 from novel_engine.memory.hierarchy import MemoryBudget
 from novel_engine.planner.outline_planner import OutlinePlanner
 from novel_engine.reconcile.commit import replay_committed
+from novel_engine.canon.vocabulary import Vocabulary, load_vocabulary
 
 
 @dataclass
@@ -39,6 +40,7 @@ class Engines:
     bible_dir: Path | None = None
     budget: MemoryBudget | None = None
     replayed: int = 0                 # số delta đã fold lúc dựng canon
+    vocabulary: Vocabulary | None = None   # bible/predicates.yaml
 
     @property
     def total_chapters(self) -> int:
@@ -64,6 +66,7 @@ class Engines:
         graph, chars, meta = (load_bible(self.bible_dir) if self.bible_dir
                               else load_bible())
         self.graph, self.chars, self.meta = graph, chars, meta
+        self.vocabulary = load_vocabulary(self.bible_dir)
         self.firewall = POVFirewall(graph)
         self.assembler = ContextAssembler(
             graph, self.store, self.budget or MemoryBudget.for_vietnamese())
@@ -87,6 +90,7 @@ def build_engines(llm, *, bible_dir: Path | str | None = None,
         assembler=ContextAssembler(graph, store, budget),
         llm=llm, meta=meta,
         bible_dir=Path(bible_dir) if bible_dir else None, budget=budget,
+        vocabulary=load_vocabulary(bible_dir),
     )
     # §3.1 — canon là FOLD của các delta đã ghi, không phải trạng thái trong bộ
     # nhớ. CLI chạy đa tiến trình: không fold lại thì mọi thứ đã ghi ở tiến

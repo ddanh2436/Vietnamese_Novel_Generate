@@ -125,8 +125,10 @@ def test_prompt_cam_dong_tu_ke_su_kien_bo_dau():
     """Model tuân thủ "snake_case không dấu" theo nghĩa đen: bỏ dấu các động từ
     kể sự kiện (`buoc_vao`, `dung_cach`) và lọt qua bộ lọc vị từ."""
     from novel_engine.prompts import EXTRACT_DIFF_TMPL, EXTRACT_EMERGENT_TMPL
+    # Quyết định Ngày 8: thay luật snake_case bằng TẬP ĐÓNG từ bible.
     for t in (EXTRACT_DIFF_TMPL, EXTRACT_EMERGENT_TMPL):
-        assert "KHOÁ TIẾNG ANH" in t and "buoc_vao" in t
+        assert "DANH SÁCH VỊ TỪ HỢP LỆ" in t and "buoc_vao" in t
+        assert "{predicates}" in t
 
 
 def test_menh_de_thieu_confidence_bi_loai_khong_bi_gan_mac_dinh():

@@ -282,3 +282,67 @@ def merge_extractions(audited_json: str, emergent_json: str, chapter: int,
 
     # `plant_evidence` chỉ lượt 1 sinh ra — lượt 2 không biết kế hoạch là gì.
     return a.stamp(chapter)
+
+
+def _scene_index(scene_id: str) -> int | None:
+    try:
+        return int(scene_id.rsplit("_S", 1)[1])
+    except (IndexError, ValueError):
+        return None
+
+
+def assign_scenes(delta: StateDelta, scenes: list[dict],
+                  min_len: int = MIN_SPAN_LEN) -> list[dict]:
+    """Gán cảnh cho mệnh đề và bằng chứng theo VỊ TRÍ span trong văn xuôi.
+
+    NT-13: chỉ số cảnh là metadata của hệ thống, không phải thứ model khai.
+
+    Lượt Gemini thật ở Chương 2: `CHAR_KAELEN.knows_secret` ("Chính tay Kaelen
+    đã khóa chặt van điều áp số bốn...") được model khai `scene=0` — cảnh hiện
+    tại ở tick 20.028. Hai hậu quả, cả hai đều âm thầm:
+    - sự thật VĨNH VIỄN được chứng thực sai mốc, làm hỏng cửa sổ khởi phát mà
+      Forward-Reachability Audit (§3.6.4) dựa vào;
+    - `flashback_findings` lọc theo `scene`, nên nếu span thuộc cảnh hồi ức thì
+      mệnh đề thoát khỏi kiểm tra hồi ức hoàn toàn.
+
+    Span xuất hiện ở NHIỀU cảnh (câu lặp lại) thì không đoán — giữ số model
+    khai và ghi chú `scene_ambiguous`. Không tìm thấy ở cảnh nào (thường là
+    span vắt qua ranh giới hai cảnh) thì giữ nguyên, không ghi chú.
+    """
+    hays = [(i, s["scene_id"], _norm(s.get("prose", "")))
+            for s in scenes
+            if (i := _scene_index(s.get("scene_id", ""))) is not None]
+
+    def locate(span: str):
+        nd = _norm(span)
+        if len(nd) < min_len:
+            return None
+        exact = [h for h in hays if nd in h[2]]
+        if len(exact) == 1:
+            return exact[0]
+        if exact:
+            return "ambiguous"
+        fuzzy = [h for h in hays if _fuzzy_present(nd, h[2])]
+        if len(fuzzy) == 1:
+            return fuzzy[0]
+        return "ambiguous" if fuzzy else None
+
+    notes: list[dict] = []
+    for a in delta.assertions:
+        hit = locate(a.span)
+        if hit == "ambiguous":
+            notes.append({"reason": "scene_ambiguous", "subject": a.subject,
+                          "predicate": a.predicate, "span": a.span[:120]})
+        elif hit is not None and a.scene != hit[0]:
+            notes.append({"reason": "scene_reassigned", "subject": a.subject,
+                          "predicate": a.predicate, "from": a.scene,
+                          "to": hit[0], "span": a.span[:120]})
+            a.scene = hit[0]
+    for pe in delta.plant_evidence:
+        hit = locate(pe.span)
+        if isinstance(hit, tuple) and pe.scene_id != hit[1]:
+            notes.append({"reason": "plant_scene_reassigned",
+                          "clue_id": pe.clue_id, "from": pe.scene_id,
+                          "to": hit[1]})
+            pe.scene_id = hit[1]
+    return notes

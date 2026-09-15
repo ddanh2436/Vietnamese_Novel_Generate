@@ -40,6 +40,7 @@ from novel_engine.canon.models import (
     Assertion, Entity, Relation, StateDelta, item_key,
 )
 from novel_engine.canon.timeline import ContinuityFrame
+from novel_engine.canon.vocabulary import check_assertion
 
 __all__ = [
     "LOCATION_PREDICATES", "affects_downstream_plan", "classify_delta",
@@ -162,7 +163,8 @@ def downstream_chapters(item: Entity | Relation | Assertion, planner,
 # ═════════════════════════════ classify_delta ═════════════════════════════
 
 def classify_delta(delta: StateDelta, graph, planner=None,
-                   frames: list[ContinuityFrame | dict] | None = None) -> dict:
+                   frames: list[ContinuityFrame | dict] | None = None,
+                   vocabulary=None) -> dict:
     """Phân loại mọi mục của delta. Đặt `delta.classification`.
 
     Mỗi mục kết thúc ở ĐÚNG MỘT chỗ: `classification`, `retractions`, hoặc
@@ -351,6 +353,14 @@ def classify_delta(delta: StateDelta, graph, planner=None,
                          (f"văn bản được trích đặt {a.subject} ở {obj}, frame "
                           f"của chương ghi {sorted(set(noi)) or 'không có mặt'}"),
                          "major")
+                continue
+        elif vocabulary is not None:
+            # Tập đóng do tác giả khai (bible/predicates.yaml). Không truyền
+            # từ vựng thì quay về luật snake_case bên dưới.
+            loi = check_assertion(a, vocabulary, index, accepted_new)
+            if loi is not None:
+                hold(k, loi[0], loi[1],
+                     "note" if loi[0] == "predicate_not_in_vocabulary" else "major")
                 continue
         elif not _CANON_PREDICATE.match(p):
             hold(k, "non_canonical_predicate",

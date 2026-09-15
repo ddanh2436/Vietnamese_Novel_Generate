@@ -234,6 +234,11 @@ VĂN BẢN đã viết. Nhiệm vụ: đối chiếu, không phải đọc hiể
 ## VĂN BẢN (chương {chapter}) — mỗi cảnh có nhãn [SCENE_ID] ở đầu
 {prose}
 
+## DANH SÁCH VỊ TỪ HỢP LỆ — TẬP ĐÓNG
+Chỉ áp cho mệnh đề `objective`. Lời nhân vật nói (`claimed_by`) và điều
+nhân vật tin (`believed_by`) không bị giới hạn bởi danh sách này.
+{predicates}
+
 Trả lời đúng hai câu hỏi, theo thứ tự:
 
 ### CÂU 1 — KẾ HOẠCH CÓ ĐƯỢC THỰC HIỆN KHÔNG?
@@ -256,10 +261,11 @@ Xuất một JSON đúng schema StateDelta:
 - KHÔNG xuất assertion về VỊ TRÍ nhân vật (`at`, `located_in`...). Vị trí đã
   được hệ thống ghi ở bước chốt cảnh; hai nguồn cho cùng một sự thật sẽ lệch
   nhau.
-- `predicate` là KHOÁ TIẾNG ANH snake_case của một THUỘC TÍNH BỀN của
-  chủ thể (vd `has_scar`, `controls`, `rank`, `knows_secret`) — KHÔNG phải
-  hành động trong cảnh. `buoc_vao`, `nhin_thay`, `dung_cach` là lời kể sự
-  kiện đã bỏ dấu, không phải sự thật về thế giới: đừng xuất chúng.
+- `predicate` CHỈ được chọn trong DANH SÁCH VỊ TỪ HỢP LỆ bên trên (tập
+  đóng, do tác giả khai), đúng loại chủ thể và kiểu giá trị ghi kèm. Không
+  có vị từ phù hợp thì KHÔNG xuất mệnh đề đó. `buoc_vao`, `nhin_thay`,
+  `dung_cach` là lời kể sự kiện, không phải sự thật về thế giới — đừng
+  xuất chúng dưới bất kỳ tên nào.
 - `span` phải nhắc tới CHỦ THỂ của mệnh đề bằng tên. Một câu chỉ tình cờ chứa
   từ khoá không phải là bằng chứng.
 - `epistemic`: "objective" chỉ khi NGƯỜI KỂ khẳng định; "claimed_by" khi một
@@ -289,7 +295,12 @@ Bạn là bộ phận ghi chép, không phải biên tập viên. Không đánh 
 ## THỰC THỂ ĐÃ BIẾT TỪ TRƯỚC
 {known_entities}
 
-Nhiệm vụ: tìm những thứ KHÔNG có trong danh sách trên.
+## DANH SÁCH VỊ TỪ HỢP LỆ — TẬP ĐÓNG
+Chỉ áp cho mệnh đề `objective`. Lời nhân vật nói (`claimed_by`) và điều
+nhân vật tin (`believed_by`) không bị giới hạn bởi danh sách này.
+{predicates}
+
+Nhiệm vụ: tìm những thứ KHÔNG có trong DANH SÁCH THỰC THỂ đã biết.
 
 - `new_entities`: người, nơi chốn, tổ chức, đồ vật có tên riêng, tập tục,
   luật lệ — bất cứ thứ gì được nhắc tới như thể nó có thật trong thế giới
@@ -304,10 +315,11 @@ Nhiệm vụ: tìm những thứ KHÔNG có trong danh sách trên.
 - `assertions`: mệnh đề sự thật, MỖI mệnh đề kèm `span` là trích dẫn nguyên
   văn (≥12 ký tự, chép chính xác từng chữ kể cả dấu), và `confidence` từ 0
   tới 1. KHÔNG xuất mệnh đề về vị trí nhân vật.
-  `predicate` là KHOÁ TIẾNG ANH snake_case của một THUỘC TÍNH BỀN của
-  chủ thể (vd `has_scar`, `controls`, `rank`, `knows_secret`) — KHÔNG phải
-  hành động trong cảnh. `buoc_vao`, `nhin_thay`, `dung_cach` là lời kể sự
-  kiện đã bỏ dấu, không phải sự thật về thế giới: đừng xuất chúng.
+  `predicate` CHỈ được chọn trong DANH SÁCH VỊ TỪ HỢP LỆ bên trên (tập
+  đóng, do tác giả khai), đúng loại chủ thể và kiểu giá trị ghi kèm. Không
+  có vị từ phù hợp thì KHÔNG xuất mệnh đề đó. `buoc_vao`, `nhin_thay`,
+  `dung_cach` là lời kể sự kiện, không phải sự thật về thế giới — đừng
+  xuất chúng dưới bất kỳ tên nào.
 - KHÔNG liệt kê góc phòng, khoang, cầu tàu... là `new_entities` kiểu
   `location`. Đó là phần của một địa điểm đã biết, không phải địa điểm mới.
 

@@ -42,6 +42,34 @@ LEAK_PATTERNS = [
     r"trong (?:thâm tâm|đầu|lòng)(?:\s*[,:;]\s*|\s+)(?!của (?:mình|tôi|anh ấy)\b)",
     r"(?:thực ra|sự thật là) .{1,40} đang (?:nói dối|che giấu)",
 ]
+INTERIOR_PATTERN = LEAK_PATTERNS[2]
+
+
+def _interior_is_pov(prose: str, m: re.Match, pov_name: str) -> bool:
+    """Mẫu nội tâm thuộc về CHÍNH POV thì không phải rò rỉ.
+
+    Gemini Chương 2, cảnh Serena kể ngôi thứ nhất: "Tôi nhích nhẹ cổ tay…, trong
+    lòng thoáng dấy lên một mối hoài nghi". Mẫu nội tâm bắt câu này thành
+    BLOCKER, và ở Ngày 10 blocker đẩy cảnh vào vòng viết lại — vì một câu đúng.
+
+    Miễn trừ chỉ khi chủ ngữ rõ ràng là POV: câu nêu tên POV, hoặc câu trần
+    thuật mở bằng "Tôi"; VÀ không có tên riêng nào khác trong câu. Không có chủ
+    ngữ nào ("Trong lòng: một thứ gì đó vỡ ra.") thì vẫn báo — thà hỏi lại.
+    """
+    start = max(prose.rfind(ch, 0, m.start()) for ch in ".!?…\n") + 1
+    ends = [i for i in (prose.find(ch, m.end()) for ch in ".!?…\n") if i != -1]
+    sentence = prose[start: min(ends) if ends else len(prose)].strip()
+    line_start = prose.rfind("\n", 0, m.start()) + 1
+    in_dialogue = prose[line_start:].lstrip()[:1] in ("—", "–", "“", '"')
+    pov = pov_name.strip()
+    first_person = not in_dialogue and re.match(r"Tôi(?!\w)", sentence) is not None
+    named = bool(pov) and re.search(rf"(?<!\w){re.escape(pov)}(?!\w)", sentence) is not None
+    if not (first_person or named):
+        return False
+    # `w[0].isupper()` chứ không phải `[A-ZÀ-Ỹ]`: dải À–Ỹ của Unicode xen kẽ
+    # chữ HOA và chữ thường ("đ", "ẹ", "ổ"), nên "để", "nhẹ" bị tính là tên riêng.
+    proper = {w for w in re.findall(r"\w+", sentence) if w[0].isupper()}
+    return proper <= {pov, "Tôi"}
 
 
 class POVFirewall:
@@ -139,6 +167,8 @@ def pov_leak_scan(prose: str, pov_name: str) -> list[dict]:
             ctx = prose[max(0, m.start() - 60): m.end() + 60]
             if pov_name.lower() in ctx.lower() and "không biết" in ctx:
                 continue      # POV tự nhận mình không biết → hợp lệ
+            if pat == INTERIOR_PATTERN and _interior_is_pov(prose, m, pov_name):
+                continue      # nội tâm của CHÍNH POV → hợp lệ
             hits.append({"pattern": pat, "span": ctx, "severity": "blocker",
                          "check": "pov_leak"})
     return hits

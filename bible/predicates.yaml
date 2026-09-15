@@ -1,0 +1,139 @@
+# ══════════════════════════════════════════════════════════════════════
+# BỘ TỪ VỰNG VỊ TỪ — TẬP ĐÓNG do tác giả khai
+# ══════════════════════════════════════════════════════════════════════
+#
+# Mệnh đề KHÁCH QUAN chỉ được vào canon nếu `predicate` nằm trong danh sách này.
+# Vị từ ngoài danh sách bị cách ly và hiện ở `review` (CP-2).
+#
+# Vì sao là tập đóng: lượt Gemini thật ở Chương 2 lách luật "snake_case không
+# dấu" bằng cách BỎ DẤU các động từ kể sự kiện (`dung_cach = "6 met"`,
+# `buoc_vao`, `nhan_dien`). Chặn một cách thì model lách cách khác; chỉ tập
+# đóng mới bền.
+#
+# Lời khai (`claimed_by`) và niềm tin (`believed_by`) KHÔNG bị kiểm theo danh
+# sách này — chúng không phải sự thật về thế giới.
+#
+# Trường:
+#   subject_kinds  loại thực thể được làm chủ thể ([any] = mọi loại)
+#   object_type    entity | text | number | bool | any
+#   object_kinds   khi object_type = entity: loại thực thể được làm giá trị
+#   permanent      thuộc tính VĨNH VIỄN — PHẢI khớp PERMANENT_PREDICATES trong
+#                  novel_engine/canon/flashback.py (có test canh)
+#   aliases        tên khác model hay dùng; được quy về `name` trước khi phân loại
+#
+# Thiếu vị từ cần thiết? Thêm vào đây. Đừng sửa code.
+
+predicates:
+  # ── VĨNH VIỄN — một khi có thì không mất (§3.6.4) ──────────────────────
+  - name: has_scar
+    description: có vết sẹo (giá trị mô tả vết sẹo, hoặc true)
+    subject_kinds: [character]
+    object_type: any
+    permanent: true
+  - name: is_dead
+    description: đã chết
+    subject_kinds: [character]
+    object_type: bool
+    permanent: true
+  - name: lost_limb
+    description: mất một phần cơ thể (giá trị nói phần nào)
+    subject_kinds: [character]
+    object_type: text
+    permanent: true
+  - name: bears_brand
+    description: mang dấu nung / ấn ký
+    subject_kinds: [character]
+    object_type: any
+    permanent: true
+  - name: holds_title
+    description: giữ tước vị, chức danh chính thức
+    subject_kinds: [character]
+    object_type: text
+    permanent: true
+  - name: sworn_oath
+    description: đã tuyên thệ (giá trị là nội dung lời thề)
+    subject_kinds: [character]
+    object_type: text
+    permanent: true
+  - name: is_exiled
+    description: đang hoặc đã bị lưu đày
+    subject_kinds: [character]
+    object_type: bool
+    permanent: true
+  - name: knows_secret
+    description: biết một bí mật (giá trị là bí mật)
+    subject_kinds: [character]
+    object_type: text
+    permanent: true
+
+  # ── TRẠNG THÁI & THUỘC TÍNH ─────────────────────────────────────────
+  - name: status
+    description: trạng thái hiện hành của một thực thể
+    subject_kinds: [any]
+    object_type: text
+    aliases: [state, current_status]
+  - name: rank
+    description: cấp bậc trong một tổ chức
+    subject_kinds: [character]
+    object_type: text
+    aliases: [position_rank, grade]
+  - name: role
+    description: vai trò, nghề nghiệp
+    subject_kinds: [character]
+    object_type: text
+    aliases: [occupation, job, profession]
+  - name: condition
+    description: tình trạng vật lý của đồ vật hoặc nơi chốn
+    subject_kinds: [object, location, resource]
+    object_type: text
+    aliases: [physical_condition, state_of_repair]
+  - name: is_damaged
+    description: bị hư hại
+    subject_kinds: [object, location, resource]
+    object_type: bool
+    aliases: [damaged]
+  - name: is_sealed
+    description: bị niêm phong
+    subject_kinds: [object, location]
+    object_type: bool
+    aliases: [sealed]
+  - name: color
+    description: màu sắc
+    subject_kinds: [object]
+    object_type: text
+    aliases: [colour]
+  - name: contains
+    description: chứa đựng (giá trị là mã thực thể hoặc mô tả)
+    subject_kinds: [object, location]
+    object_type: any
+  - name: issued_by
+    description: do ai / tổ chức nào ban hành
+    subject_kinds: [object, doctrine]
+    object_type: entity
+    object_kinds: [faction, character]
+  - name: controls
+    description: kiểm soát (địa điểm, đồ vật, tài nguyên, phe)
+    subject_kinds: [faction, character]
+    object_type: entity
+    object_kinds: [location, object, resource, faction]
+  - name: owes_debt
+    description: mắc nợ (vật chất hoặc ân tình) với ai
+    subject_kinds: [character, faction]
+    object_type: entity
+    object_kinds: [character, faction]
+    aliases: [owes_money, owes]
+  - name: doctrine_rule
+    description: điều một học thuyết hay phe phái quy định / cấm
+    subject_kinds: [doctrine, faction]
+    object_type: text
+    aliases: [rule, forbids]
+  - name: purpose
+    description: mục đích, công dụng
+    subject_kinds: [object, doctrine, location]
+    object_type: text
+    aliases: [function, use]
+  - name: origin
+    description: nguồn gốc
+    subject_kinds: [any]
+    object_type: text
+    aliases: [source_of_origin]

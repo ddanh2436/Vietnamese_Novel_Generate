@@ -211,7 +211,8 @@ def reconcile(delta: StateDelta, eng, frames=None, contracts=None) -> dict:
 
     frames = _as_frames(frames if frames is not None
                         else eng.store.get_frames(delta.chapter))
-    out = classify_delta(delta, eng.graph, eng.planner, frames)
+    out = classify_delta(delta, eng.graph, eng.planner, frames,
+                         vocabulary=getattr(eng, "vocabulary", None))
     delta.retraction_classification = out["retractions"]
     delta.quarantine = out["quarantine"]
     result["classify"] = out

@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 import time
 from pathlib import Path
@@ -24,6 +25,9 @@ from novel_engine.graph.build import run_chapter
 from novel_engine.graph.engines import build_engines
 from novel_engine.reconcile.classify import classify_delta
 from novel_engine.reconcile.commit import reconcile
+from novel_engine.audit.deterministic import (
+    audit_contract, audit_stats, deterministic_audit,
+)
 from novel_engine.llm.env import load_dotenv
 
 DB_PATH = "novel_storage.db"
@@ -252,7 +256,8 @@ def cmd_classify(args) -> int:
                                           delta.quarantine)}
         else:
             out = classify_delta(delta, eng.graph, eng.planner,
-                                 eng.store.get_frames(args.chapter))
+                                 eng.store.get_frames(args.chapter),
+                                 vocabulary=eng.vocabulary)
 
         OUT_REPORTS.mkdir(parents=True, exist_ok=True)
         rp = OUT_REPORTS / f"ch{args.chapter:03d}_classify.json"
@@ -377,6 +382,58 @@ def cmd_commit(args) -> int:
         eng.store.close()
 
 
+def _split_chapter_md(md: str) -> list[tuple[int, str]]:
+    parts = re.split(r"^## Cảnh (\d+)\s*$", md, flags=re.M)
+    return [(int(parts[i]), parts[i + 1].strip()) for i in range(1, len(parts), 2)]
+
+
+def cmd_audit(args) -> int:
+    """Kiểm toán tất định (§10.3) trên chương ĐÃ VIẾT. Không gọi LLM.
+
+    In kèm số đo thô (σ, tỉ lệ câu ngắn, mệnh đề phụ, kênh giác quan, thoại gán
+    được) — §10.3.3 nói ngưỡng phải hiệu chỉnh trên văn xuôi thật.
+
+    Mã thoát: 0 không có blocker · 2 chưa có chương · 3 có blocker.
+    """
+    path = OUT_CHAPTERS / f"ch{args.chapter:03d}.md"
+    if not path.exists():
+        print(f"chưa có {path}", file=sys.stderr)
+        return 2
+    eng = build_engines(_llm("fake"), db_path=args.db)
+    try:
+        scenes = _split_chapter_md(path.read_text(encoding="utf-8"))
+        report = {"chapter": args.chapter, "scenes": []}
+        dem: dict[str, int] = {}
+        blocker = False
+        print(f"Kiểm toán tất định chương {args.chapter} · {len(scenes)} cảnh")
+        for si, prose in scenes:
+            c = audit_contract(eng, args.chapter, si)
+            findings = deterministic_audit(prose, c, args.chapter, eng)
+            st = audit_stats(prose, c)
+            report["scenes"].append({"scene_id": c["scene_id"], "stats": st,
+                                     "findings": findings})
+            r = st["rhythm"] or {}
+            gan = sum(st["dialogue_attributed"].values())
+            print(f"  {c['scene_id']} · {st['words']} từ · σ={r.get('sd', '-')} · "
+                  f"câu ngắn {r.get('short_ratio', '-')} · mệnh đề phụ "
+                  f"{r.get('sub_ratio', '-')} · {len(st['sensory'])} kênh · thoại gán "
+                  f"{gan}/{gan + st['dialogue_unattributed']}")
+            for x in findings:
+                dem[x["check"]] = dem.get(x["check"], 0) + 1
+                blocker = blocker or x["severity"] == "blocker"
+                print(f"      [{x['severity']}] {x['check']}: {x['message'][:110]}")
+        OUT_REPORTS.mkdir(parents=True, exist_ok=True)
+        rp = OUT_REPORTS / f"ch{args.chapter:03d}_audit.json"
+        rp.write_text(json.dumps(report, ensure_ascii=False, indent=2),
+                      encoding="utf-8")
+        print("  tổng: " + (", ".join(f"{k}×{v}" for k, v in sorted(dem.items()))
+                            or "sạch"))
+        print(f"  {rp}")
+        return 3 if blocker else 0
+    finally:
+        eng.store.close()
+
+
 def cmd_show(args) -> int:
     p = OUT_CHAPTERS / f"ch{args.chapter:03d}.md"
     if not p.exists():
@@ -423,6 +480,11 @@ def main(argv=None) -> int:
     cm.add_argument("--chapter", type=int, required=True)
     cm.add_argument("--db", default=DB_PATH)
     cm.set_defaults(func=cmd_commit)
+
+    au = sub.add_parser("audit", help="kiểm toán tất định chương đã viết (§10.3)")
+    au.add_argument("--chapter", type=int, required=True)
+    au.add_argument("--db", default=DB_PATH)
+    au.set_defaults(func=cmd_audit)
 
     args = ap.parse_args(argv)
     if getattr(args, "llm", None) is None:
