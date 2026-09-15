@@ -76,6 +76,7 @@ class NetworkXGraph:
         self.g = nx.MultiDiGraph()          # thực thể + quan hệ ngữ nghĩa
         self.routes = nx.DiGraph()          # UNIFIED ROUTE GRAPH — địa lý
         self.clues: dict[str, Clue] = {}
+        self._used_forms: dict[str, list[str]] = {}
         # F6: niềm tin KHÔNG được nằm chung với sự thật khách quan.
         self.beliefs: list[dict] = []
         # Sự thật khách quan đã chốt: (subject, predicate) → object
@@ -138,6 +139,15 @@ class NetworkXGraph:
         self.clues[c.clue_id] = c
         self.upsert_entity(Entity(id=c.clue_id, kind="clue", name=c.clue_id,
                                   attributes={"target": c.macro_event_target}))
+
+    def record_surface_form(self, clue_id: str, form: str) -> None:
+        """Ghi một dạng hiện hình đã lên trang, theo THỨ TỰ dùng. Gọi từ
+        `apply_delta`, nên replay dựng lại đúng lịch sử."""
+        self._used_forms.setdefault(clue_id, []).append(form)
+
+    def used_surface_forms(self, clue_id: str) -> list[str]:
+        """§6.3 `_pick_form` gọi hàm này nhưng tài liệu không định nghĩa nó."""
+        return list(self._used_forms.get(clue_id, []))
 
     # ══════════════════ UNIFIED ROUTE GRAPH — nạp ══════════════════
 

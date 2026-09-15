@@ -37,6 +37,8 @@ from novel_engine.reconcile.classify import (
     classify_delta, is_objective, retract_key,
 )
 from novel_engine.reconcile.replan import replan_downstream
+from novel_engine.canon.models import ClueStatus
+from novel_engine.foreshadow.scheduler import decay
 
 DEFAULT_PLANT_INTENSITY = 0.6
 
@@ -140,14 +142,25 @@ def apply_delta(delta: StateDelta, graph, chars: dict, frames) -> dict:
 
     # E4: không chỗ nào cập nhật `last_touched_chapter`/`salience` thì `decay()`
     # trả 0.0 mãi mãi và hệ thống ép cài lại cùng một manh mối ở mọi chương.
+    touched: dict[str, float] = {}
     for pe in delta.plant_evidence:
         clue = graph.clues.get(pe.clue_id)
         if not pe.verified or clue is None:
             continue
         inten = delta.plant_intensity.get(pe.clue_id, DEFAULT_PLANT_INTENSITY)
+        touched[pe.clue_id] = max(touched.get(pe.clue_id, 0.0), inten)
+        if pe.surface_form:
+            graph.record_surface_form(pe.clue_id, pe.surface_form)
+    for cid, inten in sorted(touched.items()):
+        clue = graph.clues[cid]
         # Nhắc thoáng qua không khôi phục trí nhớ độc giả bằng một cảnh nhấn
-        # mạnh — salience hồi theo cường độ, không nhảy thẳng về 1.0.
-        clue.salience = min(1.0, 0.45 + 0.55 * inten)
+        # mạnh — nhưng cũng KHÔNG làm độc giả quên bớt. Bản trước GHI ĐÈ
+        # `salience = 0.45 + 0.55·cường độ`: một manh mối đang ở 0.79 được nhắc
+        # thoáng (0.2) thì tụt về 0.56. Ở đây cộng dồn bão hoà trên mức ĐÃ PHAI.
+        # Nhiều bằng chứng cùng manh mối trong một chương chỉ chạm MỘT lần.
+        cur = decay(clue, ch)
+        boost = 0.45 + 0.55 * inten
+        clue.salience = round(min(1.0, 1 - (1 - cur) * (1 - boost)), 4)
         clue.last_touched_chapter = ch
         applied["clues_touched"] += 1
 
@@ -161,6 +174,46 @@ def apply_delta(delta: StateDelta, graph, chars: dict, frames) -> dict:
         applied["clue_transitions"] += 1
 
     return applied
+
+
+def derive_clue_transitions(delta: StateDelta, clues: dict) -> tuple[dict, list[dict]]:
+    """Trạng thái manh mối do CODE suy ra, không do LLM khai (NT-13).
+
+    `plan_coverage` gác transition bằng bằng chứng xác minh — nhưng GIÁ TRỊ vẫn
+    là của model. Manh mối được giao để NHẮC LẠI, có bằng chứng thật, model khai
+    `paid_off` → canon ghi đã trả bài một chi tiết chưa ai ghép nối. Bằng chứng
+    chứng minh chi tiết đã lên trang; mode của chỉ thị cho biết nó lên trang để
+    làm gì. Hai thứ đó đủ để suy ra trạng thái:
+
+        nháp            + bằng chứng           → planted
+        đang sống       + mode payoff          → paid_off
+        planted         + bằng chứng khác      → reinforced
+
+    Trả bài chỉ đi qua chỉ thị `payoff`. Bằng chứng tình cờ (Writer cài một manh
+    mối không được giao) tính là cài/nhắc, không bao giờ là trả bài.
+    """
+    out: dict[str, ClueStatus] = {}
+    for pe in delta.plant_evidence:
+        c = clues.get(pe.clue_id)
+        if not pe.verified or c is None or pe.clue_id in out:
+            continue
+        if c.status in (ClueStatus.PAID_OFF, ClueStatus.RETIRED):
+            continue
+        mode = delta.plant_modes.get(pe.clue_id)
+        if c.status == ClueStatus.DRAFTED:
+            new = ClueStatus.PLANTED
+        elif mode == "payoff":
+            new = ClueStatus.PAID_OFF
+        elif c.status == ClueStatus.PLANTED:
+            new = ClueStatus.REINFORCED
+        else:
+            new = c.status
+        if new != c.status:
+            out[pe.clue_id] = new
+    notes = [{"clue_id": cid, "proposed": st.value,
+              "derived": out[cid].value if cid in out else None}
+             for cid, st in delta.clue_transitions.items() if out.get(cid) != st]
+    return out, notes
 
 
 def flashback_findings(delta: StateDelta, frames, graph) -> list[dict]:
@@ -222,6 +275,12 @@ def reconcile(delta: StateDelta, eng, frames=None, contracts=None) -> dict:
             if d.get("clue_id"):
                 delta.plant_intensity[d["clue_id"]] = float(
                     d.get("intensity", DEFAULT_PLANT_INTENSITY))
+                if d.get("mode"):
+                    delta.plant_modes[d["clue_id"]] = d["mode"]
+
+    derived, overridden = derive_clue_transitions(delta, eng.graph.clues)
+    delta.clue_transitions = derived
+    result["clue_transitions_overridden"] = overridden
 
     fb = flashback_findings(delta, frames, eng.graph)
     result["flashback"] = fb

@@ -26,6 +26,7 @@ clues:
       - "lớp chì quanh dấu niêm phong xỉn màu, rỗ li ti"
       - "vết loang hình bán nguyệt dưới con dấu, màu trà đặc"
     subtlety_target: 0.78
+    carriers: [object, setting]
     salience: 0.0
 
   - clue_id: CLUE_MISSING_LOGS
@@ -42,6 +43,7 @@ clues:
       - "băng ghi có một đoạn mà tiếng ồn nền đổi hẳn chất"
       - "cột giờ trong sổ bị viết đè, nét mực sau đậm hơn nét trước"
     subtlety_target: 0.65
+    carriers: [object, dialogue]
     salience: 0.0
 
   - clue_id: CLUE_THIRD_SIGNATURE
@@ -58,4 +60,5 @@ clues:
       - "một chữ ký đè lên mép ô, như thể thêm vào sau"
       - "con dấu Mật Văn trên tờ lệnh của Lõi Rạng"
     subtlety_target: 0.55
+    carriers: [object, dialogue]
     salience: 0.0

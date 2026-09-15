@@ -94,3 +94,20 @@ class OutlinePlanner:
         """Tập hành động cho `deliberate()` (§5.2). Chưa cài ở GĐ1 — trả rỗng
         để Director chạy được, và `deliberation` sẽ là dict rỗng."""
         return []
+
+    def scene_affordances(self, ch: int, si: int) -> dict[str, list[str]]:
+        """Vật mang manh mối khả dụng trong cảnh (§6.1 ràng buộc 5).
+
+        §9.2 gọi `planner.chapter_affordances(ch)` — MỘT bộ cho cả chương — nhưng
+        vật mang là của CẢNH: Chương 2 có năm cảnh một mình, và "lời thoại" chỉ
+        tồn tại ở cảnh có người thứ hai. Outline khai `affordances` thì dùng
+        nguyên; không thì suy từ ai có mặt và ở đâu.
+        """
+        s = self.scene(ch, si)
+        if s.get("affordances"):
+            return {k: list(v or []) for k, v in s["affordances"].items()}
+        others = [c for c in self.present_characters(ch, si) if c != s["pov"]]
+        return {"setting": [s["location"]],
+                "object": list(s.get("props") or [s["location"]]),
+                "behavior": others,
+                "dialogue": others}

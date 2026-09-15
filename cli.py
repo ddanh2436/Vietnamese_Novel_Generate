@@ -178,6 +178,7 @@ def cmd_write(args) -> int:
             "extraction": out.get("extraction_report", {}),
             "unresolved": out.get("unresolved", []),
             "audit": _audit_summary(out),
+            "foreshadow": out.get("foreshadow_report", {}),
         }
         (OUT_REPORTS / f"ch{args.chapter:03d}.json").write_text(
             json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -197,6 +198,23 @@ def cmd_write(args) -> int:
             print(f"  ⚠ hàng rào canon đã chặn {len(coerced)} trường hợp:")
             for sid, c in coerced[:5]:
                 print(f"      {sid} | {c}")
+        fs = out.get("foreshadow_report") or {}
+        if fs:
+            modes: dict[str, int] = {}
+            for d in fs.get("directives", []):
+                modes[d["mode"]] = modes.get(d["mode"], 0) + 1
+            print(f"  manh mối: {len(fs.get('directives', []))} chỉ thị"
+                  + "".join(f" · {m}×{n}" for m, n in sorted(modes.items()))
+                  + f" · {len(fs.get('unplaced', []))} không xếp được"
+                  + f" · {len(fs.get('escalations', []))} cần tác giả quyết")
+            for x in fs.get("unplaced", [])[:3]:
+                print(f"      [không xếp] {x['clue_id']}: {x['reason']}")
+            for x in fs.get("blocked", [])[:3]:
+                print(f"      [chờ tiền đề] {x['clue_id']}: {x['reason']} "
+                      f"{x.get('waiting_on', [])}")
+            for x in fs.get("escalations", [])[:3]:
+                print(f"      [CP-4] {x['clue_id']} quá hạn {x['overdue_by']} chương — "
+                      f"{x['question']}")
         ex = out.get("extraction_report", {})
         if ex:
             print(f"  trích xuất: {ex.get('assertions_kept', 0)} mệnh đề giữ · "

@@ -141,6 +141,7 @@ def plan_coverage(contracts: list[dict], delta: StateDelta,
     `delta.plant_evidence`, một kênh riêng có cùng không gian định danh.
     """
     promised: list[str] = []
+    plan_by_clue: dict[str, dict] = {}
     fulfilled: list[str] = []
     missed: list[dict] = []
     verified = {e.clue_id for e in delta.plant_evidence if e.verified}
@@ -151,6 +152,7 @@ def plan_coverage(contracts: list[dict], delta: StateDelta,
             if not cid:
                 continue
             promised.append(cid)
+            plan_by_clue.setdefault(cid, d)
             if cid in verified:
                 fulfilled.append(cid)
             else:
@@ -184,6 +186,18 @@ def plan_coverage(contracts: list[dict], delta: StateDelta,
             phantom.append({"clue_id": e.clue_id, "scene_id": e.scene_id,
                             "verified": e.verified})
     delta.plant_evidence = giu
+
+    # Ghi phần kế hoạch mà commit cần, NGAY BÂY GIỜ — contract không được
+    # lưu, nên lúc `cli.py commit` chạy thì nó đã mất (NT-13: code đặt).
+    for cid, d in plan_by_clue.items():
+        if d.get("intensity") is not None:
+            delta.plant_intensity[cid] = float(d["intensity"])
+        if d.get("mode"):
+            delta.plant_modes[cid] = str(d["mode"])
+    for e in delta.plant_evidence:
+        d = plan_by_clue.get(e.clue_id)
+        if d and d.get("surface_form") and not e.surface_form:
+            e.surface_form = d["surface_form"]
     verified = {e.clue_id for e in delta.plant_evidence if e.verified}
 
     # ── QUY TẮC CỨNG (NT-5) ────────────────────────────────────────────

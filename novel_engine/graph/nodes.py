@@ -21,7 +21,9 @@ from novel_engine.graph.safety import safe_node
 from novel_engine.graph.state import ChapterState
 from novel_engine.llm.json_io import merge_json, parse_model
 from novel_engine.memory.assembler import render_facts
-from novel_engine.planner.beats import build_beats
+from novel_engine.foreshadow.debt import narrative_debt_report
+from novel_engine.foreshadow.scheduler import ForeshadowScheduler, SceneSlot
+from novel_engine.planner.beats import QUIET_BEATS, build_beats
 from novel_engine.planner.contract import CharacterInScene, SceneContract
 from novel_engine.planner.tension import tension_directive
 from novel_engine.planner.timeline_alloc import allocate_scene_times
@@ -44,7 +46,8 @@ def director_node(state: ChapterState, config: RunnableConfig) -> dict:
     F4: lập lịch manh mối MỘT LẦN cho cả chương, không gọi trong vòng lặp cảnh.
     Trạng thái manh mối chỉ đổi ở `reconcile_node` (cuối chương), nên gọi 6 lần
     sẽ trả về CÙNG 3 manh mối và cả 6 cảnh nhận lệnh cài cùng 3 thứ đó — vỡ
-    `ATTENTION_BUDGET` gấp 6. (ForeshadowScheduler thuộc GĐ3; chỗ nối đã sẵn.)
+    `ATTENTION_BUDGET` gấp 6. Lập lịch một lần, nhưng XẾP CẢNH theo POV và vật
+    mang của từng cảnh (xem `foreshadow/scheduler.py`).
     """
     eng = config["configurable"]["engines"]
     ch = state["chapter"]
@@ -52,12 +55,21 @@ def director_node(state: ChapterState, config: RunnableConfig) -> dict:
 
     tension = tension_directive(ch, total, eng.store.measured_tension(ch - 1))
 
-    chapter_plants: list[dict] = []          # ← ForeshadowScheduler (GĐ3)
-    clue_escalations: list[dict] = []
-
-    beats = build_beats({"tension": tension,
-                         "plant_directives": chapter_plants},
+    beats = build_beats({"tension": tension, "plant_directives": []},
                         n=SCENES_PER_CHAPTER)
+    # POV và vật mang là của CẢNH. Scheduler xếp cảnh luôn — không để Director
+    # lọc lại theo POV rồi làm rơi manh mối không ai ghi nhận (§9.2 F4).
+    slots = [SceneSlot(index=si, pov=eng.planner.pov_for(ch, si),
+                       affordances=eng.planner.scene_affordances(ch, si),
+                       quiet=beat["function"] in QUIET_BEATS)
+             for si, beat in enumerate(beats)]
+    plan = ForeshadowScheduler(eng.graph).schedule(ch, slots)
+    for d in plan.directives:
+        beats[d.scene_index]["clue_slot"] = d.to_contract()
+    # F5/NT-17: escalation manh mối là quyết định CP-4 — đi vào báo cáo, không
+    # dừng chương.
+    clue_escalations = plan.escalations
+    debt = narrative_debt_report(eng.graph.clues, [], ch)
     # Truyền địa lý vào bộ cấp phát: nó phải tự cộng thời gian đi đường, nếu
     # không `no_teleport` (§3.6.1) dựng blocker ở mọi cảnh đổi địa điểm —
     # báo động giả, và P2 (§0.1) nói báo động giả dẫn tới việc tắt luật.
@@ -110,7 +122,7 @@ def director_node(state: ChapterState, config: RunnableConfig) -> dict:
             active_characters=chars,
             dramatic_question=beat["function"],
             tension=tension,
-            plant_directives=[d for d in [beat.get("clue_slot")] if d],
+            plant_directives=plan.for_scene(si),
             lore_integration=eng.graph.faction_tensions(
                 eng.planner.location_id(ch, si), ch),
             subtext_requirement="",
@@ -123,14 +135,15 @@ def director_node(state: ChapterState, config: RunnableConfig) -> dict:
             "contract": _contract_brief(raw),
             "beat_function": beat["function"],
             "outline": state.get("outline_beat", ""),
-            "debt": "(chưa có — ForeshadowScheduler thuộc GĐ3)",
+            "debt": _debt_brief(debt),
         }), role="director")
         contracts.append(merge_json(raw, filled))
 
     return {"contracts": contracts, "beats": beats,
             "scene_index": 0, "revision_count": 0,
             "findings": [], "max_severity": "note",
-            "clue_escalations": clue_escalations}
+            "clue_escalations": clue_escalations,
+            "foreshadow_report": {**plan.report(), "debt": debt}}
 
 
 @safe_node
@@ -170,8 +183,8 @@ def writer_node(state: ChapterState, config: RunnableConfig) -> dict:
         "tension_mode": c["tension"].get("mode", ""),
         "tension_note": c["tension"].get("note", ""),
         "pressure_type": c["tension"].get("pressure_type", ""),
-        "plant_directives": _bullets(
-            [str(d) for d in c["plant_directives"]]) or "(không có)",
+        "plant_directives": "\n".join(
+            _plant_brief(d) for d in c["plant_directives"]) or "(không có)",
         "relationship_directives": _bullets(
             [str(d) for d in c["relationship_directives"]]) or "(không có)",
         "word_min": c["word_budget"][0], "word_max": c["word_budget"][1],
@@ -524,6 +537,23 @@ def _coerce_continuity(close: SceneClose, contract: dict,
 
 # ───────────────────── kết xuất prompt ─────────────────────
 
+def _plant_brief(d: dict) -> str:
+    """Một chỉ thị cài manh mối cho Writer — đúng các khoá WRITER_TMPL nhắc tới."""
+    return (f"- {d.get('clue_id')}: surface_form “{d.get('surface_form')}” · "
+            f"carrier {d.get('carrier')} · intensity {d.get('intensity')} · "
+            f"mode {d.get('mode')}\n  instruction: {d.get('instruction')}")
+
+
+def _debt_brief(debt: dict) -> str:
+    parts = []
+    for key, label in (("overdue", "quá hạn"), ("late_to_plant", "trễ hạn cài"),
+                       ("at_risk", "sắp đến hạn"), ("forgotten", "độc giả đã quên")):
+        if debt.get(key):
+            parts.append(f"{label}: " + ", ".join(x.get("clue") or x.get("npc", "?")
+                                                  for x in debt[key]))
+    return "; ".join(parts) or "(không có)"
+
+
 def _bullets(items) -> str:
     return "\n".join(f"- {x}" for x in items if x)
 
@@ -716,7 +746,12 @@ def _contracts_brief_for_extract(contracts: list[dict]) -> str:
         # (`CH002_S00`) cho cả sáu cảnh — model không phân biệt được "kế hoạch
         # không có manh mối" với "kế hoạch không nói gì về manh mối".
         if c.get("plant_directives"):
-            lines.append(f"  plant_directives: {c['plant_directives']}")
+            # Mã, mode, vật mang và câu chữ ĐÃ GIAO — đủ để tìm bằng chứng.
+            # Không `instruction`, không `weight`: không liên quan tới việc tìm.
+            lines.append("  plant_directives:")
+            for d in c["plant_directives"]:
+                lines.append(f"    - {d.get('clue_id')} ({d.get('mode')}, qua "
+                             f"{d.get('carrier')}): “{d.get('surface_form')}”")
         else:
             lines.append("  plant_directives: (không có)")
         if c.get("relationship_directives"):

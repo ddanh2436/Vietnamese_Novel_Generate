@@ -55,12 +55,16 @@ def test_prompt_luot_1_thay_dong_khong_co_manh_moi():
     llm = FakeLLM()
     e = build_engines(llm, db_path=":memory:")
     try:
-        run_chapter(e, 1)
+        out = run_chapter(e, 1)
         from novel_engine.prompts import EXTRACT_DIFF_TMPL
         p = next(c["prompt"] for c in llm.calls if c["role"] == "extractor_diff")
         dong = "plant_directives: (không có)"
+        # Từ Ngày 11 Scheduler cài manh mối thật, nên chỉ cảnh KHÔNG được giao
+        # mới mang dòng này — mỗi cảnh như vậy đúng một lần.
+        khong_co = sum(1 for c in out["contracts"] if not c["plant_directives"])
+        assert 0 < khong_co < 6
         # Chính câu quy tắc trong template cũng chứa chuỗi này một lần.
-        assert p.count(dong) - EXTRACT_DIFF_TMPL.count(dong) == 6
+        assert p.count(dong) - EXTRACT_DIFF_TMPL.count(dong) == khong_co
     finally:
         e.store.close()
 

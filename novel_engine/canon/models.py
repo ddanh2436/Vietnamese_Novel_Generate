@@ -125,6 +125,11 @@ class Clue(BaseModel):
     subtlety_target: float = Field(default=0.6, ge=0.0, le=1.0)
                                               # 0 = đập vào mặt, 1 = gần như ẩn
     retire_reason: str | None = None
+    # Vật mang HỢP với manh mối này, do tác giả khai. §6.3 `_match_carrier`
+    # không nhìn manh mối — nó trả vật mang đầu tiên cảnh có, nên "vết ăn mòn
+    # trên con dấu" có thể bị giao cho lời thoại.
+    carriers: list[Literal["object", "setting", "behavior", "dialogue"]] = Field(
+        default_factory=lambda: ["object", "setting", "behavior", "dialogue"])
 
     @field_validator("payoff_deadline")
     @classmethod
@@ -168,6 +173,9 @@ class PlantEvidence(BaseModel):
     scene_id: str
     span: str                       # trích dẫn nguyên văn, bắt buộc
     carrier_used: str               # object | dialogue | setting | behavior
+    # Dạng hiện hình ĐÃ GIAO trong chỉ thị — do `plan_coverage` đặt từ contract
+    # (NT-13), để Scheduler không giao lại cùng một câu chữ lần sau.
+    surface_form: str | None = None
     verified: bool = False          # do verify_spans() đặt, KHÔNG do LLM
     reacted_by: list[str] = Field(default_factory=list)
     concluded_by: list[str] = Field(default_factory=list)
@@ -234,6 +242,11 @@ class StateDelta(BaseModel):
     # Cường độ cài manh mối lấy từ contract lúc ghi. Lưu vào delta để fold phát
     # lại ra ĐÚNG salience như lúc ghi — contract không được lưu lại.
     plant_intensity: dict[str, float] = Field(default_factory=dict)
+    # Mode của chỉ thị (plant | reinforce | payoff), ghi LÚC TRÍCH XUẤT khi
+    # contract còn trong tay. Luồng CLI `write → commit` không lưu contract, nên
+    # thiếu trường này thì lúc commit không ai biết manh mối được giao để CÀI
+    # hay để TRẢ BÀI — và trạng thái chỉ còn đường tin lời LLM khai.
+    plant_modes: dict[str, str] = Field(default_factory=dict)
     committed: bool = False
 
     def item(self, key: str) -> Entity | Relation | Assertion:

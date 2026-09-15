@@ -52,6 +52,9 @@ class ChapterState(TypedDict, total=False):
     delta: dict
     extraction_report: dict
     clue_escalations: list[dict]   # F5: quyết định CP-4, không chặn sản xuất
+    # Lịch manh mối của chương: chỉ thị, manh mối không xếp được, bị chặn, và
+    # báo cáo nợ (§6.4). Khai ở đây vì LangGraph bỏ khoá không khai.
+    foreshadow_report: dict
     unresolved: Annotated[list[str], operator.add]   # chỉ mục treo, từ SceneClose
     irony_seeds: list[dict]
     reconcile_report: dict         # chỉ có khi đồ thị chạy với auto_commit
