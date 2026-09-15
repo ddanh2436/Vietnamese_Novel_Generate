@@ -1,9 +1,43 @@
-.venv/
-__pycache__/
-*.pyc
-.pytest_cache/
-novel_checkpoints.db
-output/chapters/*.md
-output/deltas/*.json
-output/reports/*.json
+# ── Bí mật ──────────────────────────────────────────────
+# API key nằm ở đây. Không bao giờ commit, kể cả bản sao lưu.
 .env
+.env.*
+!.env.example
+*.key
+*.pem
+
+# ── Môi trường Python ───────────────────────────────────
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# ── Dữ liệu sinh ra khi chạy ────────────────────────────
+# Canon store, checkpoint LangGraph, file WAL/SHM đi kèm SQLite.
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+
+# Mọi thứ trong output/: chương đã viết, delta, báo cáo, bản lưu trữ.
+# Văn xuôi sinh từ Gemini và phản hồi thô của model — không phải mã nguồn.
+output/
+
+# ── Công cụ & hệ điều hành ──────────────────────────────
+.vscode/
+.idea/
+.claude/
+Thumbs.db
+Desktop.ini
+.DS_Store
+*.log
+*.tmp

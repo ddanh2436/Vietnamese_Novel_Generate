@@ -41,6 +41,9 @@ class Engines:
     budget: MemoryBudget | None = None
     replayed: int = 0                 # số delta đã fold lúc dựng canon
     vocabulary: Vocabulary | None = None   # bible/predicates.yaml
+    # Tầng hai của Auditor (§9.2). Tắt được: nó tốn một lượt gọi mỗi bản nháp,
+    # và tầng thuật toán vẫn đứng một mình được.
+    llm_audit: bool = True
 
     @property
     def total_chapters(self) -> int:

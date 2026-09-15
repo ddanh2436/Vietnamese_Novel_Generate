@@ -19,7 +19,15 @@ def after_audit(state: ChapterState) -> str:
        đã bị mài mòn qua bốn vòng revision — văn qua nhiều vòng thường trở nên
        an toàn và nhạt.
     3. MINOR không bao giờ gây viết lại. Chúng đi thẳng vào Polish.
+
+    `max_severity` do `auditor_node` tính bằng `routing_severity`, đã loại chỉ
+    số nhịp (§10.3.2) — một major về nhịp câu không được kéo cảnh về Writer.
+
+    `revision_count` đếm số lần ĐÃ viết lại (writer tăng khi nhận phản hồi),
+    nên bản nháp thứ ba mang n = 2: tổng ba bản, hai lần sửa.
     """
+    if state.get("escalated"):          # auditor_node hỏng → safe_node dựng cờ
+        return "escalate"
     sev = state.get("max_severity", "note")
     n = state.get("revision_count", 0)
 

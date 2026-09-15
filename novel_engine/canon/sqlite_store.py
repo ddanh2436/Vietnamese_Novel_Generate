@@ -149,6 +149,18 @@ class SqliteStore:
                           (chapter,))
         self.conn.commit()
 
+    def discard_scene_records(self, chapter: int) -> None:
+        """Bỏ digest và frame của một chương CHƯA hoàn tất — rollback khi đồ thị
+        escalate giữa vòng cảnh (§9.3).
+
+        Khác `clear_chapter`: KHÔNG đụng `delta_log` và `plan_patches`. Escalate
+        ở `reconcile` giữ delta lại cho tác giả duyệt; xoá nó cùng lúc là mất
+        đúng thứ đang chờ quyết định.
+        """
+        for tbl in ("continuity_frames", "scene_digests"):
+            self.conn.execute(f"DELETE FROM {tbl} WHERE chapter = ?", (chapter,))
+        self.conn.commit()
+
     def __enter__(self) -> "SqliteStore":
         return self
 

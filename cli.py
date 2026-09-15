@@ -47,6 +47,31 @@ def _render_markdown(eng, chapter: int, scene_outputs: list[dict]) -> str:
     return "\n".join(parts)
 
 
+def _render_blocked(b: dict) -> str:
+    lines = [f"## Cảnh {b['scene_index']} — BỊ CHẶN sau {b['revisions']} lần viết lại",
+             "", "> Lỗi còn lại:"]
+    lines += [f"> - [{f.get('severity')}] {f.get('check')}: {f.get('message', '')}"
+              for f in b.get("findings", [])
+              if f.get("severity") in ("blocker", "major")]
+    lines += ["", (b.get("prose") or "").strip(), ""]
+    return "\n".join(lines)
+
+
+def _audit_summary(out: dict) -> dict:
+    scenes = [{"scene_id": s["scene_id"], **s.get("audit", {})}
+              for s in out.get("scene_outputs", [])]
+    return {
+        "revisions": sum(s.get("revisions", 0) for s in scenes),
+        "polish_called": sum(1 for s in scenes if s.get("polish", {}).get("called")),
+        "polish_accepted": sum(1 for s in scenes
+                               if s.get("polish", {}).get("accepted")),
+        "residual_major": sum(1 for s in scenes for f in s.get("residual", [])
+                              if f["severity"] == "major"),
+        "scenes": scenes,
+        "log": out.get("audit_log", []),
+    }
+
+
 # ═══════════════════════════ write ═══════════════════════════
 
 def cmd_write(args) -> int:
@@ -84,14 +109,37 @@ def cmd_write(args) -> int:
                 print(out["traceback"], file=sys.stderr)
             # Escalate ở bước CUỐI (extract) nghĩa là toàn bộ văn xuôi đã được
             # viết và đã trả tiền. Thoát mà không lưu là vứt đi phần đắt nhất.
-            if out.get("scene_outputs"):
+            # Escalate trong vòng kiểm toán (§9.3) thì bản nháp BỊ CHẶN cũng được
+            # giữ, kèm lỗi — đó chính là thứ tác giả cần đọc để quyết định.
+            blocked = out.get("escalated_scene")
+            if out.get("scene_outputs") or blocked:
                 OUT_CHAPTERS.mkdir(parents=True, exist_ok=True)
                 draft = OUT_CHAPTERS / f"ch{args.chapter:03d}.escalated.md"
-                draft.write_text(_render_markdown(eng, args.chapter,
-                                                  out["scene_outputs"]),
-                                 encoding="utf-8")
+                md = _render_markdown(eng, args.chapter, out.get("scene_outputs", []))
+                if blocked:
+                    md += _render_blocked(blocked)
+                draft.write_text(md, encoding="utf-8")
                 print(f"  văn xuôi đã viết được giữ ở {draft}", file=sys.stderr)
-            print(f"  viết lại: python cli.py write --chapter {args.chapter} --force",
+            if blocked:
+                for f in blocked["findings"]:
+                    if f.get("severity") in ("blocker", "major"):
+                        print(f"      [{f['severity']}] {f.get('check')}: "
+                              f"{f.get('message', '')[:110]}", file=sys.stderr)
+            OUT_REPORTS.mkdir(parents=True, exist_ok=True)
+            (OUT_REPORTS / f"ch{args.chapter:03d}.escalated.json").write_text(
+                json.dumps({"chapter": args.chapter, "backend": args.llm,
+                            "reason": out.get("escalation_reason"),
+                            "rolled_back": bool(out.get("rolled_back")),
+                            "scenes_done": [s["scene_id"]
+                                            for s in out.get("scene_outputs", [])],
+                            "escalated_scene": blocked,
+                            "audit_log": out.get("audit_log", [])},
+                           ensure_ascii=False, indent=2), encoding="utf-8")
+            if out.get("rolled_back"):
+                print("  canon store đã được trả về trạng thái trước chương này",
+                      file=sys.stderr)
+            force = " --force" if eng.store.has_chapter(args.chapter) else ""
+            print(f"  viết lại: python cli.py write --chapter {args.chapter}{force}",
                   file=sys.stderr)
             return 1
 
@@ -129,6 +177,7 @@ def cmd_write(args) -> int:
             "time_drift": out.get("time_drift", []),
             "extraction": out.get("extraction_report", {}),
             "unresolved": out.get("unresolved", []),
+            "audit": _audit_summary(out),
         }
         (OUT_REPORTS / f"ch{args.chapter:03d}.json").write_text(
             json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -136,6 +185,14 @@ def cmd_write(args) -> int:
         print(f"\n✓ {dt:.0f}s · {len(md.split())} từ · {len(frames)} cảnh")
         print(f"  epoch {frames[0].time.epoch_tick} → {frames[-1].time.end_tick}")
         print(f"  {md_path}")
+        au = report["audit"]
+        print(f"  kiểm toán: {au['revisions']} lần viết lại · polish nhận "
+              f"{au['polish_accepted']}/{au['polish_called']} · "
+              f"{au['residual_major']} major còn lại")
+        for s in au["scenes"]:
+            pr = s.get("polish", {})
+            if pr.get("called") and not pr.get("accepted"):
+                print(f"      {s['scene_id']} polish bị từ chối: {pr.get('reason', '')[:90]}")
         if coerced:
             print(f"  ⚠ hàng rào canon đã chặn {len(coerced)} trường hợp:")
             for sid, c in coerced[:5]:

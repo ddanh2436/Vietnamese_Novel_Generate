@@ -33,10 +33,19 @@ class ChapterState(TypedDict, total=False):
     # (NT-14). Tín hiệu cho Director chương sau: beat nào đang bị ước lượng sai.
     time_drift: Annotated[list[str], operator.add]
 
-    # ── do Auditor sinh (GĐ2) ──
-    findings: list[dict]
-    max_severity: str
+    # ── do Auditor / Polish sinh (§9.3) ──
+    findings: list[dict]           # của bản nháp HIỆN TẠI; reset ở ranh giới cảnh
+    max_severity: str              # mức ĐỊNH TUYẾN — đã loại chỉ số nhịp (§10.3.2)
     revision_count: int
+    # Một mục MỖI VÒNG kiểm toán, cộng dồn cả chương: dữ liệu cho eval (M-*)
+    # và cho câu hỏi "Writer có sửa được sau phản hồi không".
+    audit_log: Annotated[list[dict], operator.add]
+    polish_report: dict            # nhận/từ chối bản Polish và lý do
+    # Bản nháp bị chặn sau MAX_REVISIONS, kèm lỗi — thứ tác giả cần đọc.
+    escalated_scene: dict
+    # LangGraph BỎ QUA mọi khoá không khai trong TypedDict — node trả về khoá lạ
+    # thì nó biến mất không báo lỗi. Cờ này cho CLI biết store đã được dọn.
+    rolled_back: bool
 
     # ── kết quả ──
     polished: str                  # CHỈ cảnh hiện tại — đừng dùng cho cả chương

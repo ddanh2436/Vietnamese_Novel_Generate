@@ -50,18 +50,23 @@ def test_chuong_1_chay_tu_START_den_END_khong_ngoai_le(run):
     assert out["scene_index"] == 6      # đã tăng hết, vòng lặp thoát đúng
 
 
-def test_so_luot_goi_llm_dung_20_khong_goi_thua(run):
-    """6 director + 6 writer + 6 scene_digest + 2 lượt trích xuất.
+def test_so_luot_goi_llm_khong_goi_thua(run):
+    """6 director + 6 writer + 6 auditor + 6 scene_digest + 2 lượt trích xuất,
+    cộng Polish CHỈ ở cảnh có ghi chú Polish xử lý được.
 
     Gọi thừa nghĩa là có vòng lặp chạy lại — F4 (schedule trong vòng lặp cảnh)
     là ví dụ đắt tiền nhất. Hai lượt trích xuất chạy MỘT LẦN cho cả chương,
     không phải một lần mỗi cảnh (C2 cùng cơ chế)."""
-    llm, _eng, _out = run
+    llm, _eng, out = run
     theo_vai = {r: sum(1 for c in llm.calls if c["role"] == r)
                 for r in {c["role"] for c in llm.calls}}
-    assert theo_vai == {"director": 6, "writer": 6, "scene_digest": 6,
-                        "extractor_diff": 1, "extractor_emergent": 1}
-    assert len(llm.calls) == 20
+    assert all(s["audit"]["revisions"] == 0 for s in out["scene_outputs"])
+    polish = sum(1 for s in out["scene_outputs"] if s["audit"]["polish"]["called"])
+    ky_vong = {"director": 6, "writer": 6, "auditor": 6, "scene_digest": 6,
+               "extractor_diff": 1, "extractor_emergent": 1}
+    if polish:
+        ky_vong["polish"] = polish
+    assert theo_vai == ky_vong
 
 
 def test_reducer_cong_don_khong_ghi_de(run):

@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import random
 import re
 from typing import Any
 
@@ -98,17 +99,22 @@ class FakeLLM:
         pov = _field(prompt, "Người kể") or "Nhân vật"
         pov = pov.split(",")[0].strip()
 
+        # `random.Random(n)` thay cho `(n + i) % len`: chỉ số tuần tự cho mỗi POV
+        # đúng 30 biến thể văn xuôi, nên hai cảnh cùng POV trùng nhau NGUYÊN VĂN
+        # khi hash prompt rơi cùng lớp đồng dư — xảy ra thật khi WRITER_TMPL
+        # thêm một dòng ở Ngày 10. Vẫn tất định: cùng prompt, cùng seed.
+        rng = random.Random(n)
         out: list[str] = []
         words = 0
         i = 0
         while words < self.word_target:
-            frag = _FRAGMENTS[(n + i) % len(_FRAGMENTS)]
+            frag = rng.choice(_FRAGMENTS)
             if i % 4 == 3:
                 # Câu ngắn xen vào — σ độ dài câu phải khác 0, nếu không
                 # `rhythm.py` gắn cờ đúng ở lần chạy đầu tiên.
                 sent = f"{frag}."
             elif i % 5 == 2:
-                out.append(_DIALOGUE[(n + i) % len(_DIALOGUE)])
+                out.append(rng.choice(_DIALOGUE))
                 words += 6
                 i += 1
                 continue
@@ -125,7 +131,10 @@ class FakeLLM:
         """Polish phải trả về thứ GẦN GIỐNG bản gốc, nếu không
         `content_drifted` (§9.2) sẽ từ chối nó ở mọi cảnh và ta không bao giờ
         test được nhánh chấp nhận."""
-        m = re.search(r"## VĂN XUÔI\s*\n(.*?)(?:\n##|\Z)", prompt, re.S)
+        # Dừng TRƯỚC câu hướng dẫn cuối của POLISH_TMPL — không thì dòng
+        # "Chỉ xuất văn xuôi…" lọt vào văn xuôi của mọi cảnh.
+        m = re.search(r"## VĂN XUÔI\s*\n(.*?)(?:\n##|\n\s*Chỉ xuất văn xuôi|\Z)",
+                      prompt, re.S)
         if m:
             return m.group(1).strip()
         return self._prose(prompt)

@@ -71,6 +71,10 @@ DEFAULT_RPM = 8
 # google-genai kêu về automatic function calling ở mọi lượt generate_content.
 # Ta không dùng AFC; cảnh báo này chỉ làm nhiễu log của mỗi lượt gọi.
 warnings.filterwarnings("ignore", message=".*automatic function calling.*")
+# Dòng 3.5-flash-lite chốt tham số lấy mẫu phía Google: `temperature` theo vai
+# trò (_TEMPERATURE) KHÔNG có tác dụng với model này. Cảnh báo lặp ở mọi
+# client và nhấn chìm log chương; sự thật đó được ghi ở đây một lần.
+warnings.filterwarnings("ignore", message=".*uses fixed sampling defaults.*")
 
 
 class _RateLimiter:

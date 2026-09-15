@@ -6,7 +6,9 @@
 Đọc liên tục năm cảnh thì ru ngủ.
 
 §10.3.2 — cảnh báo Goodhart: đây là công cụ CHẨN ĐOÁN, không phải mục tiêu cho
-Writer. Không chỉ số nào ở đây được lên `blocker`; kết quả đi vào Polish.
+Writer. Không chỉ số nào ở đây được lên `blocker`; kết quả đi vào Polish. Polish
+cần ghi chú CỤ THỂ ("đoạn 4 có 6 câu liên tiếp dài 18–22 từ"), nên các finding
+chỉ ra được chỗ nào thì kèm `evidence` là câu trích nguyên văn.
 
 Bốn chỗ khác mã §10.3.1, cả bốn đều làm một kiểm tra chết hoặc kêu sai:
 
@@ -87,20 +89,30 @@ def rhythm_stats(prose: str, lang: str = "vi") -> dict | None:
         return None
     lens = [word_count(s) for s in sents]
     run = max_run = 1
-    for a, b in zip(lens, lens[1:]):
-        run = run + 1 if abs(a - b) <= 3 else 1
-        max_run = max(max_run, run)
+    run_start = best_start = 0
+    for i, (a, b) in enumerate(zip(lens, lens[1:])):
+        if abs(a - b) <= 3:
+            run += 1
+        else:
+            run, run_start = 1, i + 1
+        if run > max_run:
+            max_run, best_start = run, run_start
     openers = Counter(_opener(s) for s in sents if _opener(s))
     paras = [p for p in re.split(r"\n\s*\n", _nfc(prose)) if p.strip()]
     para_counts = [n for n in (len(narrative_sentences(p)) for p in paras) if n > 0]
+    subs = [s for s in sents if is_subordinate_opener(s)]
+    tris = [s for s in sents if TRICLAUSE_RE.match(s)]
     return {
         "n_sentences": len(sents),
         "mean_len": round(statistics.mean(lens), 1),
         "sd": round(statistics.pstdev(lens), 2),
         "short_ratio": round(sum(1 for n in lens if n <= T["short_max"]) / len(lens), 3),
         "max_flat_run": max_run,
-        "sub_ratio": round(sum(1 for s in sents if is_subordinate_opener(s)) / len(sents), 3),
-        "triclause": sum(1 for s in sents if TRICLAUSE_RE.match(s)),
+        "flat_run_at": sents[best_start],
+        "sub_ratio": round(len(subs) / len(sents), 3),
+        "sub_examples": subs[:3],
+        "triclause": len(tris),
+        "triclause_examples": tris[:3],
         "opener_ratio": round(len(openers) / len(sents), 3),
         "top_opener": openers.most_common(1)[0] if openers else ("", 0),
         "para_sentence_counts": para_counts,
@@ -125,15 +137,21 @@ def rhythm_audit(prose: str, contract: dict, lang: str = "vi") -> list[dict]:
                                f"thiếu nhịp dứt"})
     if st["max_flat_run"] > 5:
         out.append({"severity": "minor", "check": "flat_run",
-                    "message": f"{st['max_flat_run']} câu liên tiếp dài xấp xỉ nhau"})
-    # MAJOR theo §10.3.1 — dấu vân tay của LLM. Vẫn không bao giờ là blocker.
+                    "message": f"{st['max_flat_run']} câu liên tiếp dài xấp xỉ nhau, "
+                               f"bắt đầu từ câu được trích",
+                    "evidence": st["flat_run_at"]})
+    # MAJOR theo §10.3.1 — dấu vân tay của LLM. Vẫn không bao giờ là blocker,
+    # và `routing_severity` không để nó kéo cảnh về Writer (§10.3.2).
     if st["sub_ratio"] > 0.30:
         out.append({"severity": "major", "check": "subordinate_opener",
                     "message": f"{st['sub_ratio']:.0%} câu mở đầu bằng mệnh đề phụ "
-                               f"(trần 30%) — cấu trúc lặp khuôn"})
+                               f"(trần 30%) — đưa chủ ngữ hoặc hành động lên đầu",
+                    "evidence": st["sub_examples"][0]})
     if st["triclause"] >= 3:
         out.append({"severity": "major", "check": "triclause_template",
-                    "message": f"{st['triclause']} câu theo khuôn 'Khi A, B, trong khi C'"})
+                    "message": f"{st['triclause']} câu theo khuôn 'Khi A, B, trong khi C' "
+                               f"— tách hoặc đảo cấu trúc",
+                    "evidence": st["triclause_examples"][0]})
     if st["opener_ratio"] < 0.55:
         top, n = st["top_opener"]
         out.append({"severity": "minor", "check": "opener_diversity",

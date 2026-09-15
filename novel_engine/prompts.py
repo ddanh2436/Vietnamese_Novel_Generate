@@ -42,7 +42,9 @@ thuật nội tâm, ý định hay cảm xúc của nhân vật đó.
 ## GIỌNG NHÂN VẬT
 Mỗi nhân vật có `voice_reminder`:
 - không được dùng từ trong `forbidden_lexicon`
-- phải xuất hiện dấu vết của `signature_lexicon`
+- dấu vết của `signature_lexicon` xuất hiện trong THOẠI của chính nhân vật đó.
+  KHÔNG rải các cụm này vào lời kể, kể cả khi nhân vật đó là người kể: lời kể
+  mang giọng nhân vật qua cách chọn chi tiết và nhịp câu, không qua khẩu ngữ.
 - giữ đúng `register` và `syntactic_tic`
 Dùng phản ứng cơ thể trong `somatic_allowed`. CẤM mọi biểu hiện trong
 `somatic_forbidden` — đó là sáo ngữ; thay bằng một mục trong `somatic_allowed`.
@@ -75,6 +77,8 @@ Tối đa {max_explicit_goal_statements} lần một nhân vật nói thẳng m�
 mình. Mọi mục tiêu khác phải lộ qua hành động hoặc qua điều nhân vật TRÁNH nói.
 Cần ≥{sensory_channels_required} kênh giác quan, phải có ít nhất một kênh
 không phải thị giác.
+Không quá 3 câu trong cảnh được mở đầu bằng "Khi", "Trong khi" hoặc
+"Sau khi". Với các câu còn lại, đặt chủ ngữ hoặc hành động lên đầu.
 Subtext: {subtext_requirement}
 Cụm từ bị cấm trong cảnh này: {forbidden_cliches}
 
@@ -178,8 +182,8 @@ Chỉ xuất JSON.
 
 
 AUDITOR_TMPL = """Bạn thẩm định một cảnh tiểu thuyết theo hợp đồng cảnh.
-Phần kiểm tra máy móc (độ dài, sáo ngữ, giọng nhân vật, nhịp câu) đã chạy rồi.
-Bạn CHỈ đánh giá những điều máy không làm được.
+Phần kiểm tra máy móc (độ dài, sáo ngữ, giọng nhân vật, nhịp câu, mẫu rò rỉ
+góc nhìn hiển nhiên) đã chạy rồi. Bạn CHỈ đánh giá những điều máy không làm được.
 
 ## HỢP ĐỒNG
 {contract}
@@ -187,11 +191,22 @@ Bạn CHỈ đánh giá những điều máy không làm được.
 ## VĂN XUÔI
 {prose}
 
-## KIỂM TRA
+## KIỂM TRA — `check` chỉ được là một trong các tên sau
 {checklist}
 
-Xuất JSON: {{"findings": [{{"severity": "blocker|major|minor|note",
-"check": "tên ngắn", "message": "vấn đề cụ thể", "evidence": "trích nguyên văn"}}]}}
+## MỨC ĐỘ
+- blocker: CHỈ dùng cho `pov_knowledge` — văn xuôi tường thuật trực tiếp điều
+  người kể không thể biết.
+- major: cảnh hỏng chức năng (không có thay đổi trạng thái, bí mật bị nói toạc).
+- minor: có thể tốt hơn nhưng cảnh vẫn đứng được.
+
+## BẰNG CHỨNG
+Mỗi mục PHẢI có `evidence`: một câu hoặc cụm TRÍCH NGUYÊN VĂN từ văn xuôi trên
+— chép y hệt, không diễn đạt lại, không rút gọn. Mục không trích được nguyên văn
+sẽ bị loại. Với `scene_must_change`, trích câu cuối của cảnh.
+
+Xuất JSON: {{"findings": [{{"severity": "major", "check": "subtext",
+"message": "vấn đề cụ thể", "evidence": "trích nguyên văn"}}]}}
 
 Không có vấn đề thì trả {{"findings": []}}. Đừng bịa ra vấn đề để tỏ ra hữu ích.
 Chỉ xuất JSON.

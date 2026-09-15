@@ -318,7 +318,9 @@ def test_extractor_chay_DUNG_MOT_LAN_cho_ca_chuong(rig):
                 for r in {c["role"] for c in llm.calls}}
     assert theo_vai["extractor_diff"] == 1
     assert theo_vai["extractor_emergent"] == 1
-    assert len(llm.calls) == 20          # 18 của GĐ1 + 2 lượt trích xuất
+    # Tổng số lượt gọi thuộc về test_graph_integration — ở đây chỉ khẳng định
+    # trích xuất KHÔNG chạy theo cảnh.
+    assert theo_vai["scene_digest"] == 6
 
 
 def test_luot_1_nhan_van_xuoi_CA_CHUONG_khong_chi_canh_cuoi(rig):

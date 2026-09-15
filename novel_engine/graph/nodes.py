@@ -1,12 +1,19 @@
 """Các node của LangGraph (§9.2).
 
-GĐ1 có BA node: director → writer → scene_boundary → (vòng lại writer | END).
-Auditor, Polish, Extractor, Reconcile thuộc GĐ2–GĐ3.
+Vòng một cảnh: writer → auditor → (writer | polish) → scene_boundary. Phần
+QUYẾT ĐỊNH của Auditor và Polish nằm ở `audit/critique.py` (hàm thuần); node ở
+đây chỉ gọi LLM và ghi state.
 """
 from __future__ import annotations
 
 from langchain_core.runnables import RunnableConfig
 
+from novel_engine.audit.critique import (
+    audit_checklist, clean_polish_output, content_drifted, new_serious,
+    parse_llm_findings, polish_notes, routing_severity, writer_feedback,
+)
+from novel_engine.audit.deterministic import deterministic_audit
+from novel_engine.audit.prose import CLICHE_PHRASES
 from novel_engine.canon.models import StateDelta
 from novel_engine.canon.timeline import ContinuityFrame, SceneClose, StoryTime
 from novel_engine.character.models import CLICHE_SOMATICS
@@ -19,8 +26,8 @@ from novel_engine.planner.contract import CharacterInScene, SceneContract
 from novel_engine.planner.tension import tension_directive
 from novel_engine.planner.timeline_alloc import allocate_scene_times
 from novel_engine.prompts import (
-    DIRECTOR_TMPL, EXTRACT_DIFF_TMPL, EXTRACT_EMERGENT_TMPL,
-    SCENE_DIGEST_TMPL, WRITER_TMPL,
+    AUDITOR_TMPL, DIRECTOR_TMPL, EXTRACT_DIFF_TMPL, EXTRACT_EMERGENT_TMPL,
+    POLISH_TMPL, SCENE_DIGEST_TMPL, WRITER_TMPL,
 )
 from novel_engine.reconcile.commit import reconcile
 from novel_engine.reconcile.verify import (
@@ -145,13 +152,9 @@ def writer_node(state: ChapterState, config: RunnableConfig) -> dict:
     ctx = eng.firewall.filter_memory(ctx, c["pov_character"], epoch_tick)
     c_safe = eng.firewall.filter_scene_contract(c, c["pov_character"])
 
-    feedback = ""
-    if state.get("findings"):
-        blockers = [f for f in state["findings"]
-                    if f.get("severity") in ("blocker", "major")]
-        if blockers:
-            feedback = "## PHẢN HỒI CẦN SỬA\n" + "\n".join(
-                f"- [{f['severity']}] {f.get('message', '')}" for f in blockers)
+    # Chỉ số nhịp không quay lại Writer (§10.3.2), và lời giải thích của
+    # Auditor LLM không vào prompt Writer — nó đọc bí mật NPC (xem critique.py).
+    feedback = writer_feedback(state.get("findings") or [])
 
     prose = eng.llm.invoke(WRITER_TMPL.format_map({
         "pov_name": c.get("pov_character_name") or c["pov_character"],
@@ -193,6 +196,168 @@ def writer_node(state: ChapterState, config: RunnableConfig) -> dict:
 
 
 @safe_node
+def auditor_node(state: ChapterState, config: RunnableConfig) -> dict:
+    """Kiểm tra HAI TẦNG: thuật toán trước (rẻ, chắc chắn), LLM sau (đắt, tinh).
+
+    Tầng LLM chỉ chạy khi tầng thuật toán chưa thấy BLOCKER — bản nháp đó chắc
+    chắn bị viết lại, thẩm định thêm là trả tiền cho nhận xét sẽ vứt đi.
+
+    Tầng LLM hỏng (JSON vỡ, hết quota) thì GHI LẠI và đi tiếp với tầng thuật
+    toán, không escalate cả chương: tầng hai là tinh chỉnh, không phải cổng chặn.
+    Findings của nó phải qua `parse_llm_findings` — có trích dẫn nguyên văn mới
+    được tính (NT-5), và chỉ `pov_knowledge` được là blocker.
+    """
+    eng = config["configurable"]["engines"]
+    c = state["contracts"][state["scene_index"]]
+    prose = state["current_draft"]
+
+    findings = [{**f, "source": "code"}
+                for f in deterministic_audit(prose, c, state["chapter"], eng)]
+    issues: list[dict] = []
+    llm_called = False
+    if getattr(eng, "llm_audit", True) and not any(
+            f["severity"] == "blocker" for f in findings):
+        llm_called = True
+        try:
+            raw = eng.llm.invoke(AUDITOR_TMPL.format_map({
+                "contract": _audit_contract_brief(c),
+                "prose": prose,
+                "checklist": audit_checklist(c),
+            }), role="auditor")
+            llm_findings, issues = parse_llm_findings(raw, prose)
+            findings += llm_findings
+        except Exception as e:          # noqa: BLE001 — tầng hai là tuỳ chọn
+            issues = [{"stage": "llm_audit", "reason": "llm_error",
+                       "message": f"{type(e).__name__}: {e}"[:200]}]
+
+    # `max_severity` là mức ĐỊNH TUYẾN: chỉ số nhịp không kéo cảnh về Writer
+    # (§10.3.2), dù chúng vẫn giữ mức major trong báo cáo.
+    sev = routing_severity(findings)
+    return {
+        "findings": findings, "max_severity": sev,
+        "audit_log": [{
+            "scene_id": c["scene_id"],
+            "draft": state.get("revision_count", 0),
+            "max_severity": sev,
+            "checks": sorted({f"{f['check']}:{f['severity']}" for f in findings}),
+            # NỘI DUNG lỗi nghiêm trọng, không chỉ tên loại. Lượt Gemini đầu tiên
+            # của Ngày 10 viết lại CH002_S04 vì một `pov_leak` mà báo cáo không
+            # cho biết là câu nào — không phân biệt được rò rỉ thật với báo động giả.
+            "serious": [{"check": f["check"], "severity": f["severity"],
+                         "message": f.get("message", "")[:240],
+                         "evidence": f.get("evidence", "")[:200]}
+                        for f in findings if f["severity"] in ("blocker", "major")],
+            "llm_called": llm_called,
+            "issues": issues,
+        }],
+    }
+
+
+@safe_node
+def polish_node(state: ChapterState, config: RunnableConfig) -> dict:
+    """CHỈ trau chuốt văn phong. Không đụng biến điều khiển vòng lặp — việc đó
+    thuộc `scene_boundary_node` (NT-9).
+
+    Luôn ghi `polished`: bản trau chuốt nếu được nhận, bản nháp nếu không. Ba
+    trường hợp KHÔNG gọi hoặc KHÔNG nhận:
+
+    - Không có ghi chú Polish xử lý được → không gọi. Trau chuốt không mục tiêu
+      chỉ là thêm một lượt mài mòn (§9.3 quy tắc 2) và một lượt quota.
+    - `content_drifted` → từ chối. Polish hay vô tình sửa nội dung, và văn xuôi
+      này là thứ Extractor sẽ biến thành canon (NT-14).
+    - Bản Polish sinh blocker/major MỚI (vd. một câu nội tâm NPC) → từ chối.
+      §9.2 đưa bản Polish thẳng tới `scene_boundary`, không qua Auditor — không
+      kiểm lại ở đây thì Polish là lối vòng qua toàn bộ vòng kiểm toán.
+
+    LLM Polish lỗi → giữ bản nháp. Trau chuốt là tuỳ chọn; mất nó không đáng
+    dừng chương.
+    """
+    eng = config["configurable"]["engines"]
+    c = state["contracts"][state["scene_index"]]
+    draft = state["current_draft"]
+    findings = state.get("findings") or []
+    notes = polish_notes(findings)
+    report: dict = {"scene_id": c["scene_id"], "notes": len(notes)}
+
+    if not notes:
+        return {"polished": draft, "polish_report": {
+            **report, "accepted": False, "called": False,
+            "reason": "không có ghi chú Polish xử lý được — giữ bản nháp"}}
+
+    banned = list(dict.fromkeys(CLICHE_SOMATICS + CLICHE_PHRASES
+                                + list(c.get("forbidden_cliches", []))))
+    try:
+        raw = eng.llm.invoke(POLISH_TMPL.format_map({
+            "notes": _bullets(notes),
+            "voice_sheets": _voice_sheets(c),
+            "banned": ", ".join(banned),
+            "prose": draft,
+        }), role="polish")
+    except Exception as e:              # noqa: BLE001 — Polish là tuỳ chọn
+        return {"polished": draft, "polish_report": {
+            **report, "accepted": False, "called": True,
+            "reason": f"lỗi LLM: {type(e).__name__}: {e}"[:200]}}
+
+    out = clean_polish_output(raw)
+    why = content_drifted(draft, out, _drift_names(eng, c))
+    if why is None:
+        worse = new_serious(findings, deterministic_audit(out, c, state["chapter"], eng))
+        if worse:
+            why = "bản polish sinh lỗi mới: " + ", ".join(worse)
+    if why:
+        # Giữ bản bị từ chối: "con số đổi: mất ['0']" chỉ kiểm lại được khi thấy
+        # Polish đã viết gì thay vào.
+        return {"polished": draft, "polish_report": {
+            **report, "accepted": False, "called": True, "reason": why,
+            "rejected_text": out[:RAW_KEEP_CHARS]}}
+    return {"polished": out, "polish_report": {
+        **report, "accepted": True, "called": True, "changed": out != draft}}
+
+
+def _audit_contract_brief(c: dict) -> str:
+    return "\n".join([
+        _contract_brief(c),
+        f"Câu hỏi kịch tính: {c.get('dramatic_question', '')}",
+        f"Trạng thái đầu: {c.get('entry_state', '')}",
+        f"Trạng thái cuối: {c.get('exit_state', '')}",
+    ])
+
+
+def _voice_sheets(c: dict) -> str:
+    """Giọng cho Polish — KHÔNG có khoảng số (NT-7, §10.3.2)."""
+    out = []
+    for ch in c.get("active_characters", []):
+        v = ch.get("voice_reminder") or {}
+        if not v:
+            continue
+        out.append(f"- {ch['name']}: giọng {v.get('register')}; tật: "
+                   f"{v.get('syntactic_tic')}; hay dùng: "
+                   f"{', '.join(v.get('signature_lexicon', [])[:6])}; CẤM: "
+                   f"{', '.join(v.get('forbidden_lexicon', []))}")
+    return "\n".join(out) or "(không có)"
+
+
+def _drift_names(eng, c: dict) -> list[str]:
+    names = {ch["name"] for ch in c.get("active_characters", [])}
+    names |= {p.name for p in eng.chars.values()}
+    names |= {e["name"] for e in eng.graph.entity_index()
+              if e.get("name") and e["name"] != e["id"]}
+    return sorted(names)
+
+
+def _scene_audit_summary(state: ChapterState) -> dict:
+    fs = state.get("findings") or []
+    return {
+        "revisions": state.get("revision_count", 0),
+        "max_severity": state.get("max_severity", "note"),
+        "residual": [{"severity": f["severity"], "check": f.get("check"),
+                      "message": f.get("message", "")}
+                     for f in fs if f.get("severity") in ("major", "minor")],
+        "polish": dict(state.get("polish_report") or {}),
+    }
+
+
+@safe_node
 def scene_boundary_node(state: ChapterState, config: RunnableConfig) -> dict:
     """Chốt sổ một cảnh. Node này tồn tại vì BỐN lý do, và cả bốn đều là thứ
     bản trước đánh rơi:
@@ -210,7 +375,8 @@ def scene_boundary_node(state: ChapterState, config: RunnableConfig) -> dict:
     eng = config["configurable"]["engines"]
     idx = state["scene_index"]
     c = state["contracts"][idx]
-    # GĐ1 chưa có Polish, nên lấy thẳng bản nháp. GĐ2 sẽ đổi sang `polished`.
+    # `polish_node` luôn ghi `polished` — bản trau chuốt nếu được nhận, bản
+    # nháp nếu bị từ chối. `current_draft` chỉ là lưới an toàn.
     prose = state.get("polished") or state["current_draft"]
 
     valid_locs = eng.graph.location_ids()
@@ -255,8 +421,10 @@ def scene_boundary_node(state: ChapterState, config: RunnableConfig) -> dict:
         "findings": [],
         "max_severity": "note",
         "polished": "",
+        "polish_report": {},
         "scene_outputs": [{"scene_id": c["scene_id"], "prose": prose,
-                           "digest": close.digest, "coerced": coerced}],
+                           "digest": close.digest, "coerced": coerced,
+                           "audit": _scene_audit_summary(state)}],
         "frames": [frame.model_dump()],
         "unresolved": close.unresolved,
     }
@@ -378,7 +546,16 @@ def _contract_brief(raw: dict) -> str:
 
 def _characters_brief(chars: list[dict]) -> str:
     """Kết xuất nhân vật SAU khi qua `filter_scene_contract`. Các trường nội
-    tâm của nhân vật không phải POV đã bị lột ở đó — ở đây chỉ định dạng."""
+    tâm của nhân vật không phải POV đã bị lột ở đó — ở đây chỉ định dạng.
+
+    Cảnh MỘT MÌNH không có thoại, nên không đưa `signature_lexicon`. Lượt Gemini
+    Ngày 10 viết Chương 2 (5/6 cảnh chỉ một nhân vật) hai lần: dù WRITER_TMPL
+    dặn "chỉ dùng trong THOẠI", danh sách "từ hay dùng" vẫn nằm trong prompt và
+    không có chỗ nào khác để đặt — 60 rồi 66 lần các cụm như "theo thẩm quyền",
+    "hồ sơ cho thấy" rải vào lời kể. Một ràng buộc không thể thoả thì model phá
+    nó; bỏ nguyên liệu gây ra nó thì không cần ràng buộc. Từ CẤM vẫn giữ.
+    """
+    solo = len(chars) < 2
     out = []
     for ch in chars:
         lines = [f"### {ch.get('name')} ({ch['id']})"]
@@ -388,7 +565,13 @@ def _characters_brief(chars: list[dict]) -> str:
             v = ch["voice_reminder"]
             lines.append(f"- giọng: {v.get('register')}; tật cú pháp: "
                          f"{v.get('syntactic_tic')}")
-            lines.append(f"- từ hay dùng: {', '.join(v.get('signature_lexicon', [])[:6])}")
+            if solo:
+                lines.append("- cảnh này nhân vật ở MỘT MÌNH, không có ai để nói "
+                             "chuyện: giọng lộ qua chi tiết được chọn và nhịp câu, "
+                             "không qua khẩu ngữ hay cụm từ quen miệng")
+            else:
+                lines.append(f"- từ hay dùng (chỉ trong THOẠI): "
+                             f"{', '.join(v.get('signature_lexicon', [])[:6])}")
             lines.append(f"- từ CẤM: {', '.join(v.get('forbidden_lexicon', [])[:6])}")
             if v.get("under_stress_shift"):
                 lines.append(f"- dưới áp lực: {v['under_stress_shift'].strip()}")
