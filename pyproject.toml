@@ -1,0 +1,26 @@
+[project]
+name = "novel-engine"
+version = "2.5.0"
+description = "Multi-agent engine cho tiểu thuyết dài kỳ — kiến trúc v2.5"
+requires-python = ">=3.11"
+dependencies = [
+    "pydantic>=2.7",
+    "langgraph>=0.2",
+    "langgraph-checkpoint-sqlite",
+    "langchain-anthropic",
+    "networkx",
+    "tiktoken",
+    "pyyaml",
+]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[tool.setuptools.packages.find]
+include = ["novel_engine*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+filterwarnings = ["error::DeprecationWarning"]
+markers = ["slow: chạy cli.py qua subprocess thật"]

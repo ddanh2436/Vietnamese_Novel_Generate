@@ -1,0 +1,102 @@
+id: CHAR_KAELEN
+name: Kaelen
+role_tier: protagonist
+
+want: "Chứng minh Lò 3 bị phá hoại từ bên trong, để án lưu đày được lật lại"
+need: "Chấp nhận rằng mình đã ký lệnh xả áp đêm đó — và không ai ép cả"
+
+fatal_flaw:
+  name: "Tự kết tội trước khi bị kết tội"
+  distortion_rule: >
+    Khi có người đưa ra bằng chứng gỡ tội cho anh, anh tìm cách bác bỏ nó
+    bằng một chi tiết kỹ thuật, rồi tự đưa ra một cách diễn giải nặng hơn.
+    Anh tin nhẹ tội là một hình thức nói dối.
+  trigger_conditions:
+    - "có người bênh vực anh trước mặt người thứ ba"
+    - "một bằng chứng làm giảm phần lỗi của anh"
+    - "được đề nghị một thoả thuận giảm án"
+  cost_already_paid:
+    - "từ chối luật sư biện hộ ở phiên xử, nên bị lưu đày thay vì quản thúc"
+    - "đẩy Serena ra khi cô định làm chứng cho anh"
+  arc_direction: transmutes
+
+private_agenda: >
+  Nếu tìm được chữ ký thứ ba, anh định công bố nó ở nơi đông người nhất —
+  kể cả khi việc đó khiến chính anh bị xử lại và mất mạng.
+
+skills:
+  reactor_engineering: 0.92
+  document_forensics: 0.61
+  close_combat: 0.74
+  negotiation: 0.18
+
+blindspots:
+  - "luôn cho rằng người khác hành động vì nguyên tắc, không vì sợ hãi"
+  - "không nhận ra khi ai đó đang bảo vệ anh"
+
+beliefs:
+  - proposition: "Lệnh xả áp đêm đó chỉ có hai chữ ký"
+    confidence: 0.88
+    source: "bản sao anh được xem ở phiên xử"
+    is_actually_true: false
+  - proposition: "Lõi Rạng đã bỏ rơi anh để giữ danh dự phân bộ"
+    confidence: 0.7
+    source: "suy đoán riêng sau hai năm không ai liên lạc"
+    is_actually_true: false
+
+desires:
+  - label: "Lật lại án lưu đày"
+    layer: want
+    urgency: 0.85
+    satisfied_by: [CLUE_THIRD_SIGNATURE, CLUE_MISSING_LOGS]
+    threatened_by: [FACT_CIPHER]
+  - label: "Được thừa nhận là mình đã chọn, không phải bị lừa"
+    layer: need
+    urgency: 0.55
+    threatened_by: ["mọi bằng chứng gỡ tội"]
+
+intentions:
+  - "Vào được Lò 3 mà không qua Trạm Chốt Vệ Đà"
+  - "Tìm bản lưu gốc của lệnh xả áp"
+
+private_knowledge:
+  - proposition: "Chính anh đã mở khoang Lõi lúc 02:40 đêm đó"
+    confidence: 1.0
+    source: "ký ức trực tiếp"
+    is_actually_true: true
+
+voice:
+  register: clipped
+  mean_sentence_len: [6, 13]
+  max_sentence_len: 24
+  signature_lexicon:
+    - "áp suất"
+    - "dung sai"
+    - "theo quy trình"
+    - "tôi ký"
+    - "sai số"
+    - "ca trực"
+    - "không phải nếu"
+    - "đúng giờ đó"
+  forbidden_lexicon:
+    - "có lẽ"
+    - "tôi nghĩ rằng"
+    - "biết đâu"
+    - "định mệnh"
+    - "thành thật mà nói"
+  syntactic_tic: "hay trả lời bằng một con số trước khi trả lời bằng một câu"
+  question_ratio: [0.02, 0.10]
+  self_reference_rate: 0.34
+  under_stress_shift: >
+    câu ngắn thêm, bỏ chủ ngữ, chuyển sang thuật ngữ kỹ thuật thuần —
+    càng gần sự thật về mình thì càng nói như đọc báo cáo sự cố
+
+somatic_signature:
+  - "ấn ngón cái vào khớp ngón trỏ cho tới khi nghe tiếng kêu"
+  - "đếm nhịp bằng cách gõ gót chân xuống nền"
+  - "nghiêng đầu như đang nghe một tiếng động ở tần số thấp"
+
+moral_line: "Không để người khác chịu tội thay mình, kể cả khi họ tự nguyện"
+
+debt_to:
+  CHAR_SERENA: "cô đã huỷ lời khai bất lợi cho anh, và anh chưa từng hỏi vì sao"

@@ -1,0 +1,163 @@
+# ══════════════════════════════════════════════════════════════════════
+# BIBLE SANCTUM — bản thu nhỏ cho walking skeleton (GĐ 1)
+# Nguồn sự thật GỐC của tác giả. Agent không được sửa file này.
+# ══════════════════════════════════════════════════════════════════════
+
+meta:
+  title: "Sanctum — Arc 1: Cuộc Thanh Trừng Khởi Động"
+  total_chapters: 5
+  ticks_per_hour: 1
+  # Gốc trục epoch. KHÔNG để 0: hồi ức cần chỗ trong quá khứ. Sự cố Lò 3 xảy
+  # ra hai năm trước hiện tại truyện = 2 × 365 × 24 = 17.520 tick, nên nếu
+  # hiện tại bắt đầu ở tick 0 thì mốc hồi ức phải là số ÂM — `StoryTime` không
+  # cấm, nhưng mọi phép so sánh và mọi log sẽ đọc như lỗi.
+  # 20.000 cho hiện tại nghĩa là đêm sự cố nằm quanh tick 2.480.
+  epoch_start: 20000
+
+# ────────────────────────────── PHE PHÁI ──────────────────────────────
+factions:
+  - id: FACT_ARCLIGHT
+    name: "Phân Bộ Lõi Rạng"
+    aliases: ["Arclight", "Radiant Core Division"]
+    canon_locked: true
+    attributes:
+      doctrine: "Lõi Thánh Địa là thiết bị, không phải thánh tích — phải được bảo trì công khai"
+      seat: LOC_REACTOR_3
+
+  - id: FACT_CIPHER
+    name: "Tổng Cục Mật Văn"
+    aliases: ["Cipher Directorate", "Overseer"]
+    canon_locked: true
+    attributes:
+      doctrine: "Sự thật về Lõi là tài sản của Giáo hội; biết quá nhiều là một tội"
+      seat: LOC_RUINED_CATHEDRAL
+
+# ────────────────────────────── ĐỊA ĐIỂM ──────────────────────────────
+locations:
+  - id: LOC_ORE_PORT
+    name: "Cảng Quặng"
+    canon_locked: true
+    attributes:
+      register: "ồn, mùi lưu huỳnh, cần trục kêu suốt đêm"
+
+  - id: LOC_RUINED_CATHEDRAL
+    name: "Thánh đường Đổ nát"
+    canon_locked: true
+    attributes:
+      register: "vôi vữa, kính vỡ, tiếng vọng dội ba lần"
+
+  - id: LOC_REACTOR_3
+    name: "Lò Phản ứng Số 3"
+    canon_locked: true
+    attributes:
+      register: "rung nền, ánh sáng vàng bệnh, không khí khô rát"
+
+  - id: LOC_VEDA_CHECKPOINT
+    name: "Trạm Chốt Vệ Đà"
+    canon_locked: true
+    attributes:
+      register: "đèn pha, hàng người xếp dài, giấy tờ ẩm"
+
+# ═══════════════════ UNIFIED ROUTE GRAPH (§3.6.1 + §5.6.1) ═══════════════════
+# MỘT nguồn địa lý, HAI phép chiếu:
+#   travel_ticks  = base_ticks × speed_multiplier   (bỏ cạnh nếu blocked_by ∩ phe thù)
+#   latency_ticks = base_ticks × channel.latency_multiplier
+#                                                   (bỏ cạnh nếu kênh ∉ allowed_channels)
+#
+# Trạm Chốt Vệ Đà là NÚT THẮT có chủ ý: Thánh đường chỉ tới được qua nó. Khi
+# Mật Văn phong toả chốt, Thánh đường thành bất khả đạt với người thù địch —
+# nhưng tin đồn vẫn lọt qua đường biển. Đó là toàn bộ lý do hai cơ chế phải
+# chiếu từ cùng một đồ thị.
+routes:
+  - from: LOC_ORE_PORT
+    to: LOC_VEDA_CHECKPOINT
+    base_ticks: 4
+    terrain: plains
+    blocked_by: []
+    allowed_channels: [courier, rumor, trade_caravan]
+
+  - from: LOC_VEDA_CHECKPOINT
+    to: LOC_RUINED_CATHEDRAL
+    base_ticks: 3
+    terrain: cathedral_ward
+    blocked_by: [FACT_CIPHER]
+    allowed_channels: [courier, signal]
+
+  - from: LOC_VEDA_CHECKPOINT
+    to: LOC_REACTOR_3
+    base_ticks: 9
+    terrain: mountain_pass
+    blocked_by: []
+    allowed_channels: [courier, rumor]
+
+  # Đường biển vòng xa, tránh được chốt kiểm soát — nhưng tin chính thống
+  # (courier/signal) không đi lối này, chỉ có hàng hoá và tin đồn.
+  - from: LOC_ORE_PORT
+    to: LOC_REACTOR_3
+    base_ticks: 14
+    terrain: sea
+    blocked_by: []
+    allowed_channels: [trade_caravan, rumor]
+
+# ────────────────────────── QUAN HỆ KHỞI ĐIỂM ──────────────────────────
+# `since_tick` là trục EPOCH (NT-6) — dùng cho POV firewall.
+# `since_chapter` là trục ĐỌC — dùng cho faction_tensions.
+relations:
+  - src: FACT_ARCLIGHT
+    dst: LOC_REACTOR_3
+    type: CONTROLS
+    weight: 0.9
+  - src: FACT_CIPHER
+    dst: LOC_RUINED_CATHEDRAL
+    type: CONTROLS
+    weight: 1.0
+  - src: FACT_CIPHER
+    dst: LOC_VEDA_CHECKPOINT
+    type: CONTROLS
+    weight: 0.8
+
+  - src: FACT_CIPHER
+    dst: FACT_ARCLIGHT
+    type: HAS_FEUD_WITH
+    weight: 0.85
+    since_chapter: 0
+  - src: FACT_ARCLIGHT
+    dst: FACT_CIPHER
+    type: HAS_FEUD_WITH
+    weight: 0.7
+    since_chapter: 0
+
+  - src: CHAR_SERENA
+    dst: FACT_CIPHER
+    type: MEMBER_OF
+    weight: 1.0
+  - src: CHAR_VHAL
+    dst: FACT_CIPHER
+    type: MEMBER_OF
+    weight: 0.55
+
+  # Kaelen ĐÃ TỪNG thuộc Lõi Rạng — quan hệ đóng ở chương 0 (lưu đày).
+  # Giữ lại thay vì xoá: event sourcing cần biết nó từng tồn tại.
+  - src: CHAR_KAELEN
+    dst: FACT_ARCLIGHT
+    type: MEMBER_OF
+    weight: 0.9
+    since_chapter: 0
+    until_chapter: 0
+
+  # Tri thức khởi điểm — khoá theo EPOCH, không theo chương.
+  - src: CHAR_SERENA
+    dst: CLUE_MISSING_LOGS
+    type: KNOWS_ABOUT
+    weight: 1.0
+    since_tick: 0
+  - src: CHAR_KAELEN
+    dst: LOC_REACTOR_3
+    type: KNOWS_ABOUT
+    weight: 1.0
+    since_tick: 0
+  - src: CHAR_KAELEN
+    dst: FACT_CIPHER
+    type: SUSPECTS
+    weight: 0.45
+    since_tick: 0

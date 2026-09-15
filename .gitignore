@@ -1,0 +1,9 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+novel_checkpoints.db
+output/chapters/*.md
+output/deltas/*.json
+output/reports/*.json
+.env

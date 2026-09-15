@@ -1,0 +1,107 @@
+id: CHAR_SERENA
+name: Serena
+role_tier: major
+
+want: "Đóng hồ sơ Lò 3 vĩnh viễn, trước khi Tổng Cục mở lại cuộc điều tra"
+need: "Nói ra chữ ký thứ ba là của mình, với đúng người mà điều đó sẽ làm tổn thương"
+
+fatal_flaw:
+  name: "Bảo vệ người khác bằng cách giấu họ sự thật"
+  distortion_rule: >
+    Khi phải chọn giữa nói thật và giữ an toàn cho ai đó, cô luôn chọn giữ
+    an toàn — rồi tự thiết kế một phiên bản sự thật vừa đủ để người kia
+    không đi tìm tiếp. Cô coi đó là nghiệp vụ, không phải nói dối.
+  trigger_conditions:
+    - "người cô quan tâm sắp chạm vào một sự thật nguy hiểm"
+    - "được hỏi trực tiếp về đêm xảy ra sự cố"
+    - "có mặt người thứ ba có thẩm quyền"
+  cost_already_paid:
+    - "huỷ lời khai có lợi cho Kaelen, khiến anh bị lưu đày"
+    - "để một kỹ thuật viên ca trực nhận kỷ luật thay"
+  arc_direction: deepens
+
+private_agenda: >
+  Cô đang lặng lẽ tìm và tiêu huỷ mọi bản lưu của lệnh xả áp — không để che
+  giấu tội mình, mà để Kaelen không bao giờ tìm ra và không bao giờ phải chọn
+  giữa anh và cô.
+
+skills:
+  interrogation: 0.94
+  document_forensics: 0.88
+  bureaucratic_navigation: 0.9
+  reactor_engineering: 0.35
+
+blindspots:
+  - "tin rằng người ta sẽ biết ơn khi được bảo vệ khỏi sự thật"
+  - "đánh giá thấp khả năng Kaelen tự kết tội mình mà không cần bằng chứng"
+
+beliefs:
+  - proposition: "Kaelen sẽ chết nếu biết chữ ký thứ ba là của tôi"
+    confidence: 0.81
+    source: "cách anh phản ứng ở phiên xử"
+    is_actually_true: null
+  - proposition: "Hạm Đội Số 3 đã bị giải tán"
+    confidence: 0.3
+    source: "tin cô tự thả ra để thử xem ai nhắc lại nó"
+    is_actually_true: false
+
+desires:
+  - label: "Đóng hồ sơ Lò 3"
+    layer: want
+    urgency: 0.9
+    satisfied_by: ["tiêu huỷ bản lưu lệnh xả áp"]
+    threatened_by: [CHAR_KAELEN, CLUE_THIRD_SIGNATURE]
+  - label: "Được tha thứ mà không phải xin"
+    layer: need
+    urgency: 0.62
+    threatened_by: ["mọi cuộc trò chuyện thành thật"]
+
+intentions:
+  - "Giữ Kaelen ở phía bắc Trạm Chốt, càng xa Lò 3 càng tốt"
+  - "Xác định ai đã sao chép bản lưu trước cô"
+
+private_knowledge:
+  - proposition: "Chữ ký thứ ba trên lệnh xả áp là của tôi"
+    confidence: 1.0
+    source: "ký ức trực tiếp"
+    is_actually_true: true
+  - proposition: "Kaelen mở khoang Lõi vì tôi bảo anh ấy làm vậy"
+    confidence: 1.0
+    source: "ký ức trực tiếp"
+    is_actually_true: true
+
+voice:
+  register: formal
+  mean_sentence_len: [17, 31]
+  max_sentence_len: 52
+  signature_lexicon:
+    - "theo thẩm quyền"
+    - "tôi e rằng"
+    - "hồ sơ cho thấy"
+    - "về mặt thủ tục"
+    - "anh hiểu cho"
+    - "đã được lưu"
+    - "trong phạm vi tôi biết"
+    - "điều đó không cần thiết"
+  forbidden_lexicon:
+    - "đéo"
+    - "kệ"
+    - "chắc vậy"
+    - "tôi thề"
+    - "thôi bỏ đi"
+  syntactic_tic: "mở đầu bằng một mệnh đề nhượng bộ rồi đảo ngược nó bằng 'tuy nhiên'"
+  question_ratio: [0.18, 0.34]
+  self_reference_rate: 0.12
+  under_stress_shift: >
+    câu DÀI hơn chứ không ngắn lại, thêm mệnh đề phụ và cách nói bị động —
+    càng gần chỗ hiểm càng nghe như đang đọc văn bản hành chính
+
+somatic_signature:
+  - "xoay chiếc nhẫn dấu quanh ngón, đúng ba vòng rồi dừng"
+  - "chỉnh cho mép giấy thẳng hàng với mép bàn trước khi trả lời"
+  - "chớp mắt chậm một nhịp dài trước câu quan trọng nhất"
+
+moral_line: "Không ký tên vào một bản án tử hình"
+
+leverage_over:
+  CHAR_VHAL: "biết ông ta đã bán ba giấy phép quá cảnh cho Lõi Rạng"

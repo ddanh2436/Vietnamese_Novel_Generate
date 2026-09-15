@@ -1,0 +1,91 @@
+id: CHAR_VHAL
+name: Vhal
+role_tier: supporting
+
+want: "Giữ Trạm Chốt Vệ Đà chạy đúng sổ sách cho tới ngày về hưu, còn mười một tháng"
+need: "Thừa nhận rằng 'đúng sổ sách' đã là một lựa chọn đạo đức từ lâu rồi"
+
+fatal_flaw:
+  name: "Trốn sau quy trình"
+  distortion_rule: >
+    Khi bị đặt trước một quyết định đạo đức, ông chuyển nó thành một câu hỏi
+    thủ tục — ai có thẩm quyền, mẫu đơn nào, hạn nộp bao giờ — rồi xử lý câu
+    hỏi thủ tục đó một cách tận tâm và coi như đã xong việc.
+  trigger_conditions:
+    - "có người xin một ngoại lệ"
+    - "được hỏi ý kiến cá nhân thay vì ý kiến chức vụ"
+    - "chứng kiến một bất công trong phạm vi thẩm quyền của mình"
+  cost_already_paid:
+    - "ký lệnh trục xuất một gia đình thợ mỏ vì thiếu một con dấu"
+  arc_direction: heals
+
+private_agenda: >
+  Ông đã bán ba giấy phép quá cảnh cho người của Lõi Rạng, không phải vì tiền
+  mà vì một người trong số đó giống hệt đứa con trai ông đã mất ở Lò 3.
+
+skills:
+  bureaucratic_navigation: 0.86
+  document_forensics: 0.42
+  interrogation: 0.3
+  close_combat: 0.15
+
+blindspots:
+  - "tin rằng một quy trình được tuân thủ đủ chặt thì không thể sinh ra bất công"
+  - "không nhận ra Serena đang nắm thóp mình"
+
+beliefs:
+  - proposition: "Vụ Lò 3 là tai nạn kỹ thuật, đã có kết luận chính thức"
+    confidence: 0.66
+    source: "công báo của Tổng Cục"
+    is_actually_true: false
+
+desires:
+  - label: "Về hưu đúng hạn, hồ sơ sạch"
+    layer: want
+    urgency: 0.78
+    threatened_by: [CHAR_SERENA, CLUE_MISSING_LOGS]
+  - label: "Được nói ra vì sao mình bán ba giấy phép đó"
+    layer: need
+    urgency: 0.4
+    satisfied_by: [CHAR_KAELEN]
+
+intentions:
+  - "Không để tên mình xuất hiện trong bất kỳ hồ sơ nào liên quan tới Lò 3"
+
+private_knowledge:
+  - proposition: "Tôi đã cho ba người của Lõi Rạng qua chốt đêm trước vụ nổ"
+    confidence: 1.0
+    source: "ký ức trực tiếp"
+    is_actually_true: true
+
+voice:
+  register: vernacular
+  mean_sentence_len: [10, 20]
+  max_sentence_len: 34
+  signature_lexicon:
+    - "mẫu bảy ba"
+    - "hết giờ tiếp nhận rồi"
+    - "không phải việc của tôi"
+    - "anh xếp hàng bên kia"
+    - "trên đưa xuống"
+    - "cứ theo đúng mẫu"
+    - "tôi còn mười một tháng"
+    - "sổ sách nó vậy"
+  forbidden_lexicon:
+    - "theo thẩm quyền"
+    - "về mặt thủ tục"
+    - "dung sai"
+    - "vinh quang"
+  syntactic_tic: "hay chốt câu bằng một câu hỏi tu từ ngắn: '..., được chưa?'"
+  question_ratio: [0.25, 0.45]
+  self_reference_rate: 0.28
+  under_stress_shift: >
+    nói nhiều hơn hẳn, lặp lại điều lệ đã nói, chèn chuyện đời tư không liên
+    quan — nói để lấp chỗ trống chứ không để trả lời
+
+somatic_signature:
+  - "lật qua lật lại cùng một trang sổ dù đã đọc xong"
+  - "hà hơi lên con dấu rồi chùi vào tay áo, kể cả khi không cần đóng dấu"
+  - "nhìn đồng hồ treo tường ngay sau khi được hỏi một câu khó"
+
+moral_line: "Không nhận tiền để ký một giấy tờ mà mình biết là giả"

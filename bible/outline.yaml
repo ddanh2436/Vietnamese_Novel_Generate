@@ -1,0 +1,108 @@
+# Dàn ý Arc 1 — "Cuộc Thanh Trừng Khởi Động".
+#
+# Đây là đầu vào của TÁC GIẢ. Director đọc file này để biết POV, địa điểm và
+# ai có mặt ở từng cảnh; nó KHÔNG hỏi LLM những điều đó (NT-1: LLM diễn đạt,
+# không quyết định).
+#
+# `time_overrides` khoá theo chỉ số cảnh. Mốc `epoch_tick` của hồi ức là
+# quyết định sáng tác — hệ thống không suy ra được "mười năm trước" (§8.2.1).
+
+chapters:
+  - chapter: 1
+    title: "Cảng Quặng, ba giờ mười hai"
+    outline_beat: >
+      Kaelen quay lại Cảng Quặng sau hai năm lưu đày, xin một giấy phép quá
+      cảnh mà anh biết sẽ bị từ chối. Vhal từ chối đúng như dự đoán, nhưng
+      cách ông ta từ chối để lộ rằng ông ta biết Kaelen định đi đâu. Serena
+      xuất hiện ở cảnh cuối, không phải để chặn anh mà để chắc chắn anh đi
+      đúng con đường cô đã dọn sẵn.
+    scenes:
+      - pov: CHAR_KAELEN
+        location: LOC_ORE_PORT
+        present: [CHAR_KAELEN]
+        goals:
+          CHAR_KAELEN: "Xác định ca trực nào đang gác chốt đêm nay"
+
+      - pov: CHAR_KAELEN
+        location: LOC_VEDA_CHECKPOINT
+        present: [CHAR_KAELEN, CHAR_VHAL]
+        goals:
+          CHAR_KAELEN: "Xin giấy phép quá cảnh tới Lò 3"
+          CHAR_VHAL: "Từ chối mà không để lộ mình biết Kaelen định làm gì"
+        hidden_actions:
+          CHAR_VHAL: "lặng lẽ gạt hồ sơ Kaelen sang chồng giấy sẽ bị huỷ cuối ca"
+
+      - pov: CHAR_KAELEN
+        location: LOC_VEDA_CHECKPOINT
+        present: [CHAR_KAELEN, CHAR_VHAL]
+        goals:
+          CHAR_KAELEN: "Ép Vhal nói ra ai đã ra lệnh chặn mình"
+          CHAR_VHAL: "Chuyển câu hỏi đạo đức thành câu hỏi thủ tục"
+
+      - pov: CHAR_VHAL
+        location: LOC_VEDA_CHECKPOINT
+        present: [CHAR_VHAL]
+        goals:
+          CHAR_VHAL: "Xoá tên mình khỏi nhật ký ca trực đêm nay"
+
+      - pov: CHAR_KAELEN
+        location: LOC_ORE_PORT
+        present: [CHAR_KAELEN, CHAR_SERENA]
+        goals:
+          CHAR_KAELEN: "Hiểu vì sao Serena lại ở đây, đúng đêm nay"
+          CHAR_SERENA: "Đẩy Kaelen đi đường biển thay vì qua chốt"
+        hidden_actions:
+          CHAR_SERENA: "gắn thẻ định vị vào quai ba lô của Kaelen"
+
+      - pov: CHAR_KAELEN
+        location: LOC_ORE_PORT
+        present: [CHAR_KAELEN]
+        goals:
+          CHAR_KAELEN: "Quyết định đi hay ở, trước khi trời sáng"
+
+  - chapter: 2
+    title: "Đường biển"
+    outline_beat: >
+      Chuyến tàu quặng mười bốn giờ. Kaelen nhớ lại đêm xảy ra sự cố — cảnh
+      hồi ức đầu tiên của truyện. Ở hiện tại, Serena nhận ra thẻ định vị đã
+      dừng di chuyển từ sáu giờ trước.
+    # Hồi ức phải nằm TRƯỚC mốc neo trên trục epoch, nếu không `_mode_valid`
+    # (§3.6.1) báo đúng: "hồi ức kết thúc SAU mốc neo — không phải hồi ức".
+    # Đêm sự cố Lò 3 = hai năm trước hiện tại ≈ tick 2.480.
+    time_overrides:
+      # Outline nói thẳng "mười bốn giờ". BEAT_DURATION_TICKS chỉ đoán 3 tick
+      # theo chức năng beat, nên tác giả phải ghi đè — đúng cái §8.2.1 dặn.
+      # Không ghi đè thì model báo 14 tick, kế hoạch nói 3, và hệ thống phải
+      # tự đẩy các cảnh sau (xem `_reflow_after_drift`).
+      1:
+        duration_ticks: 14
+      2:
+        mode: flashback
+        epoch_tick: 2480
+        anchor_scene: CH001_S01
+        duration_ticks: 4
+    scenes:
+      - pov: CHAR_KAELEN
+        location: LOC_ORE_PORT
+        present: [CHAR_KAELEN]
+        goals: {CHAR_KAELEN: "Lên tàu mà không bị ghi tên"}
+      - pov: CHAR_KAELEN
+        location: LOC_ORE_PORT
+        present: [CHAR_KAELEN]
+        goals: {CHAR_KAELEN: "Chịu đựng mười bốn giờ không có việc gì làm"}
+      - pov: CHAR_KAELEN
+        location: LOC_REACTOR_3
+        present: [CHAR_KAELEN, CHAR_SERENA]
+        goals: {CHAR_KAELEN: "Nhớ lại chính xác mình đã ký cái gì"}
+      - pov: CHAR_SERENA
+        location: LOC_RUINED_CATHEDRAL
+        present: [CHAR_SERENA]
+        goals: {CHAR_SERENA: "Giải thích vì sao thẻ định vị đứng yên"}
+      - pov: CHAR_KAELEN
+        location: LOC_REACTOR_3
+        present: [CHAR_KAELEN]
+        goals: {CHAR_KAELEN: "Tìm lối vào Lò 3 không qua cổng chính"}
+      - pov: CHAR_KAELEN
+        location: LOC_REACTOR_3
+        present: [CHAR_KAELEN]
+        goals: {CHAR_KAELEN: "Đối diện với khoang Lõi lần đầu sau hai năm"}

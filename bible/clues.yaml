@@ -1,0 +1,61 @@
+# Ba manh mối đầu tiên về sự sụp đổ của Lõi Thánh Địa.
+#
+# `description` KHÔNG BAO GIỜ được đưa nguyên văn cho Writer (§3.3). Writer chỉ
+# nhận một `surface_form` cụ thể kèm chỉ thị cường độ. Đưa description thẳng
+# vào prompt là cách chắc chắn nhất để có câu văn kiểu "anh chú ý thấy con dấu
+# có vết ăn mòn, điều đó thật đáng ngờ".
+#
+# `prerequisites` tạo thành DAG, đảm bảo thứ tự tiết lộ hợp lý:
+#
+#     CLUE_SEAL_CORROSION ──┐
+#                           ├──> CLUE_THIRD_SIGNATURE
+#     CLUE_MISSING_LOGS ────┘
+
+clues:
+  - clue_id: CLUE_SEAL_CORROSION
+    macro_event_target: EV_CORE_COLLAPSE
+    description: >
+      Con dấu niêm phong khoang Lõi bị ăn mòn bởi axit công nghiệp — thứ mà
+      Giáo hội cấm tuyệt đối. Nghĩa là khoang đã bị mở TRƯỚC vụ nổ, bởi người
+      có quyền tiếp cận vật tư công nghiệp, tức người của Lõi Rạng.
+    payoff_threshold: 2
+    payoff_deadline: 5
+    prerequisites: []
+    surface_forms:
+      - "mép con dấu sần lên như vỏ cam để lâu"
+      - "lớp chì quanh dấu niêm phong xỉn màu, rỗ li ti"
+      - "vết loang hình bán nguyệt dưới con dấu, màu trà đặc"
+    subtlety_target: 0.78
+    salience: 0.0
+
+  - clue_id: CLUE_MISSING_LOGS
+    macro_event_target: EV_CORE_COLLAPSE
+    description: >
+      Nhật ký vận hành Lò 3 thiếu đúng chín giờ trước vụ nổ. Không phải bị
+      xoá — bị GHI ĐÈ bằng dữ liệu của một ca trực khác, nghĩa là có người
+      trong phòng điều khiển làm việc đó, không phải kẻ đột nhập.
+    payoff_threshold: 2
+    payoff_deadline: 6
+    prerequisites: []
+    surface_forms:
+      - "số hiệu ca trực nhảy một quãng, rồi quay lại như chưa có gì"
+      - "băng ghi có một đoạn mà tiếng ồn nền đổi hẳn chất"
+      - "cột giờ trong sổ bị viết đè, nét mực sau đậm hơn nét trước"
+    subtlety_target: 0.65
+    salience: 0.0
+
+  - clue_id: CLUE_THIRD_SIGNATURE
+    macro_event_target: EV_CORE_COLLAPSE
+    description: >
+      Lệnh xả áp khẩn cấp cần hai chữ ký. Bản lưu có ba. Chữ ký thứ ba thuộc
+      về một Giám Sát Mật Văn đáng lẽ không có mặt ở Lò 3 đêm đó — và người
+      đó là Serena.
+    payoff_threshold: 4
+    payoff_deadline: 5
+    prerequisites: [CLUE_SEAL_CORROSION, CLUE_MISSING_LOGS]
+    surface_forms:
+      - "ba nét bút ở chỗ chỉ có hai ô kẻ sẵn"
+      - "một chữ ký đè lên mép ô, như thể thêm vào sau"
+      - "con dấu Mật Văn trên tờ lệnh của Lõi Rạng"
+    subtlety_target: 0.55
+    salience: 0.0
