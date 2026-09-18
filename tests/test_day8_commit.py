@@ -449,7 +449,9 @@ def _cli(*args, cwd):
 def test_cli_write_review_commit_status(tmp_path):
     assert _cli("write", "--chapter", "1", cwd=tmp_path).returncode == 0
     r = _cli("review", "--chapter", "1", cwd=tmp_path)
-    assert r.returncode == 0 and "chờ duyệt" in r.stdout and "WORLD GRAPH" in r.stdout
+    # Từ Ngày 18, `review` hiển thị diff CP-2 (§16.1) thay cho bảng nhóm cũ.
+    assert r.returncode == 0 and "chờ duyệt" in r.stdout
+    assert "đề xuất ghi vào canon" in r.stdout and "world graph" in r.stdout
     c = _cli("commit", "--chapter", "1", cwd=tmp_path)
     assert c.returncode == 0, c.stdout + c.stderr
     assert "Ghi canon d_ch001" in c.stdout

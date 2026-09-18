@@ -77,6 +77,39 @@ def _brief(obj) -> str:
         return str(obj)[:200]
 
 
+MAX_COERCE = 4
+
+
+def _validate_khoan_dung(model, it):
+    """Validate một mục, tự sửa những sai kiểu HIỂN NHIÊN rồi thử lại.
+
+    Lượt Gemini Arc 1: Extractor trả `"concluded_by": "CHAR_KAELEN"` — một chuỗi
+    ở chỗ schema đòi danh sách. Cả mục `plant_evidence` bị loại, nên manh mối ĐÃ
+    được cài và ĐÃ được trích xuất vẫn bị tính là trượt: 0/2 ở cả năm chương,
+    M11 = 0.0, và nợ manh mối vượt ngưỡng. Một trường sai kiểu giết một cơ chế.
+
+    Chỉ sửa MỘT loại sai: giá trị đơn ở chỗ cần danh sách (`list_type`). Không
+    đoán gì thêm — mọi lần sửa đều được ghi lại như `coerced`.
+    """
+    sua = []
+    for _ in range(MAX_COERCE):
+        try:
+            return model.model_validate(it), sua
+        except ValidationError as e:
+            loi = e.errors()
+            hong = [x for x in loi
+                    if x.get("type") == "list_type" and len(x.get("loc", ())) == 1
+                    and isinstance(it.get(x["loc"][0]), (str, int, float, bool))]
+            if not hong:
+                return None, loi
+            it = dict(it)
+            for x in hong:
+                f = x["loc"][0]
+                sua.append((f, _brief(it[f])))
+                it[f] = [it[f]]
+    return None, [{"loc": ("?",), "msg": "vẫn không hợp lệ sau khi ép kiểu"}]
+
+
 def parse_delta_lenient(raw: str, repair_llm=None,
                         source: str = "") -> tuple[StateDelta, list[dict]]:
     """Trả `(delta, issues)`. `issues` gồm mọi mục bị ép kiểu hoặc bị loại."""
@@ -122,10 +155,16 @@ def parse_delta_lenient(raw: str, repair_llm=None,
                     # NT-13: `chapter`/`scene` là metadata của hệ thống — model
                     # hay bỏ trống, `stamp()` sẽ điền `chapter` sau.
                     it = {"chapter": 0, "scene": 0, **it}
-            try:
-                ok.append(model.model_validate(it))
-            except ValidationError as e:
-                err = e.errors()[0]
+            obj, sua = _validate_khoan_dung(model, it)
+            if obj is not None:
+                for f, v in sua:
+                    issues.append({"source": source, "field": field, "index": i,
+                                   "action": "coerced",
+                                   "reason": f"'{f}': {v} → danh sách một phần tử",
+                                   "item": _brief(it)})
+                ok.append(obj)
+            else:
+                err = sua[0]
                 issues.append({
                     "source": source, "field": field, "index": i,
                     "action": "dropped", "reason": "invalid_item",

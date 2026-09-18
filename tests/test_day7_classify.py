@@ -174,7 +174,9 @@ def test_du_lieu_gemini_that_chuong_1(g, planner):
     assert q[item_key(a[3])] == "unknown_location"
     assert q["E:LOC_PIER_3"] == "location_without_route"
     assert q["E:LOC_BAY_9"] == "location_without_route"
-    assert out["classification"]["E:OBJ_PERMIT_73"] == "enrichment"
+    # Dàn ý Chương 4 dùng "mẫu bảy ba" làm đạo cụ, nên vật này ĐỤNG kế hoạch hạ
+    # nguồn và thuộc hạng improvement (CP-4), không phải enrichment.
+    assert out["classification"]["E:OBJ_PERMIT_73"] == "improvement"
     assert out["summary"]["contradictions"] == 0
 
 
@@ -345,8 +347,9 @@ def test_thuc_the_moi_duoc_dan_y_chuong_sau_nhac_toi(planner):
     assert affects_downstream_plan(
         Entity(id="OBJ_LOCATION_TAG", kind="object", name="Thẻ định vị"),
         planner, chapter=1) is True
+    # Vật không chương nào nhắc tới thì không đụng kế hoạch nào.
     assert affects_downstream_plan(
-        Entity(id="OBJ_SO_CA_TRUC", kind="object", name="sổ ca trực"),
+        Entity(id="OBJ_COI_SUONG_MU", kind="object", name="còi sương mù"),
         planner, chapter=1) is False
 
 
@@ -360,7 +363,8 @@ def test_su_that_vinh_vien_ve_nhan_vat_con_xuat_hien(planner):
 
 def test_chuong_cuoi_khong_co_gi_de_replan(planner):
     scar = _a("CHAR_KAELEN", "has_scar", True, "Kaelen có vết sẹo chéo trên trán")
-    assert affects_downstream_plan(scar, planner, chapter=2) is False
+    # Chương cuối của dàn ý (Arc 1 kết ở Chương 5) — không còn chương nào phía sau.
+    assert affects_downstream_plan(scar, planner, chapter=5) is False
     assert affects_downstream_plan(scar, None, chapter=1) is False
 
 
@@ -447,7 +451,8 @@ def test_chuong_fake_khong_co_mau_thuan():
         d = StateDelta.model_validate(st["delta"])
         out = classify_delta(d, eng.graph, eng.planner, st["frames"])
         assert out["summary"]["contradictions"] == 0
-        assert out["classification"]["E:OBJ_SO_CA_TRUC"] == "enrichment"
+        # "sổ ca trực" là đạo cụ của dàn ý Chương 3 → đụng kế hoạch hạ nguồn.
+        assert out["classification"]["E:OBJ_SO_CA_TRUC"] == "improvement"
     finally:
         eng.store.close()
 
@@ -473,4 +478,4 @@ def test_cli_classify(tmp_path):
     rep = json.loads((tmp_path / "output" / "reports" / "ch001_classify.json")
                      .read_text(encoding="utf-8"))
     assert rep["delta_id"] == "d_ch001"
-    assert rep["classification"]["E:OBJ_SO_CA_TRUC"] == "enrichment"
+    assert rep["classification"]["E:OBJ_SO_CA_TRUC"] == "improvement"

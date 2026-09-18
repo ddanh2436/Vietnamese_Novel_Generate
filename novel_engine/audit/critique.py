@@ -52,7 +52,17 @@ STYLE_CHECKS = frozenset({
 # Polish sửa CÂU CHỮ, không thêm nội dung (POLISH_TMPL). `length`, `sensory`,
 # `no_dialogue` đòi viết thêm — đưa cho Polish là mời nó bịa chi tiết, rồi
 # `content_drifted` từ chối bản đó. Chúng ở lại báo cáo.
-POLISHABLE_CHECKS = STYLE_CHECKS | {"cliche", "voice"}
+POLISHABLE_CHECKS = STYLE_CHECKS | {
+    "cliche", "voice",
+    # Sửa được bằng CÂU CHỮ: bớt khẩu ngữ, đổi câu mở, đổi quy ước thoại, đổi
+    # một lượt thoại lặp. Còn `scene_repetition` và `sentence_repetition` thì
+    # không: cảnh dựng lại cảnh trước phải VIẾT LẠI, không trau chuốt được.
+    "tic_overuse", "tic_budget", "verbal_tic_overuse", "figure_overuse", "counting_tic",
+    "lexicon_in_narration",
+    "numeric_opener",
+    "dialogue_style", "dialogue_repetition", "somatic_overuse", "somatic_budget",
+    "malformed_word",
+}
 
 # Loại lỗi Auditor LLM được dùng, kèm câu hướng dẫn CỐ ĐỊNH cho Writer.
 LLM_CHECKS = {

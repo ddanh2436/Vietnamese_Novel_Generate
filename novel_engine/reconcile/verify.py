@@ -135,8 +135,65 @@ def verify_spans(delta: StateDelta, prose: str,
     return delta, rejected
 
 
+def payoff_not_spoken(delta: StateDelta, scenes) -> list[dict]:
+    """Trả bài mà không ai NÓI RA thì độc giả không được trả bài.
+
+    Đo trên Arc 1 viết lại: cả sáu bằng chứng manh mối đều có
+    `concluded_by: CHAR_KAELEN` và `carrier_used` là vật thể — nghĩa là mọi
+    khoảnh khắc ghép nối đều diễn ra trong đầu một người, kể lại bằng lời kể.
+    Manh mối được cài công phu suốt bốn chương rồi trả bài bằng một câu tường
+    thuật là đổi một cú đấm lấy một dòng tóm tắt.
+
+    Chỉ soi chỉ thị `payoff`. Cài và nhắc lại thì im lặng mới đúng — chúng phải
+    đi qua mắt độc giả mà không được chỉ trỏ.
+    """
+    van = {s.get("scene_id"): s.get("prose", "") for s in (scenes or [])}
+    ra = []
+    for e in delta.plant_evidence:
+        if not e.verified or delta.plant_modes.get(e.clue_id) != "payoff":
+            continue
+        thoai = [l for l in van.get(e.scene_id, "").splitlines()
+                 if l.strip()[:1] in ("—", "–", "“", '"')]
+        if not any(e.span.strip() in l for l in thoai):
+            ra.append({"clue_id": e.clue_id, "scene_id": e.scene_id,
+                       "span": e.span[:80]})
+    return ra
+
+
+CARRIERS = ("object", "setting", "behavior", "dialogue")
+
+
+def carrier_mismatch(delta: StateDelta, plan_by_clue: dict) -> list[dict]:
+    """Kênh Writer DÙNG có đúng kênh Scheduler GIAO không.
+
+    Scheduler xoay vòng vật mang để cùng một manh mối không hiện lên theo cùng
+    một cách ở mọi chương (`CARRIER_ORDER`, §6.3). Phép xoay ấy chỉ đúng nếu
+    kênh được giao là kênh thật sự dùng — mà chưa chỗ nào đối chiếu.
+
+    Đo trên Arc 1 viết lại: cả sáu bằng chứng đều khai vật mang là đồ vật, hai
+    trong số đó bằng những chữ không có trong từ vựng ("tài liệu", "audio
+    recording"). Kiểm riêng từ vựng thì vô nghĩa — không ai đọc trường ấy. Đối
+    chiếu với chỉ thị thì khác: nó trả lời được câu "Scheduler bảo cài qua
+    thoại, vậy nó có lên trang bằng thoại không".
+    """
+    ra = []
+    for e in delta.plant_evidence:
+        d = plan_by_clue.get(e.clue_id)
+        giao = (d or {}).get("carrier")
+        dung = (e.carrier_used or "").strip().lower()
+        if not e.verified or not giao:
+            continue
+        if dung not in CARRIERS:
+            ra.append({"clue_id": e.clue_id, "scene_id": e.scene_id,
+                       "asked": giao, "used": e.carrier_used, "why": "ngoài từ vựng"})
+        elif dung != giao:
+            ra.append({"clue_id": e.clue_id, "scene_id": e.scene_id,
+                       "asked": giao, "used": dung, "why": "khác kênh được giao"})
+    return ra
+
+
 def plan_coverage(contracts: list[dict], delta: StateDelta,
-                  known_clues: set[str] | None = None) -> dict:
+                  known_clues: set[str] | None = None, scenes=None) -> dict:
     """Đối chiếu những gì contract HỨA với những gì đã XÁC MINH được.
 
     B1/NT-8: bản trước đối chiếu `d["clue_id"]` với
@@ -233,6 +290,22 @@ def plan_coverage(contracts: list[dict], delta: StateDelta,
                               f"minh — đã loại")}
                  for b in bo_qua if not b["promised"]]
 
+    lech = carrier_mismatch(delta, plan_by_clue)
+    findings += [{"severity": "note", "check": "carrier_mismatch",
+                  "message": (f"{x['clue_id']} ở {x['scene_id']}: chỉ thị giao "
+                              f"vật mang '{x['asked']}' nhưng bằng chứng khai "
+                              f"'{x['used']}' ({x['why']}) — phép xoay vòng vật "
+                              f"mang của Scheduler đang dựa trên số liệu sai")}
+                 for x in lech]
+
+    cam = payoff_not_spoken(delta, scenes)
+    findings += [{"severity": "major", "check": "payoff_not_spoken",
+                  "message": (f"{c['clue_id']} trả bài ở {c['scene_id']} nhưng "
+                              f"khoảnh khắc ghép nối chỉ nằm trong lời kể — "
+                              f"để một nhân vật NÓI RA điều vừa hiểu"),
+                  "evidence": c["span"]}
+                 for c in cam]
+
     findings += [{"severity": "note", "check": "phantom_plant_evidence",
                   "message": (f"bằng chứng cài '{p['clue_id']}' ở {p['scene_id']} "
                               f"không trỏ tới manh mối nào trong canon — đã loại")}
@@ -245,6 +318,8 @@ def plan_coverage(contracts: list[dict], delta: StateDelta,
         "missed_plants": missed,
         "incidental_plants": incidental,
         "phantom_evidence": phantom,
+        "payoff_not_spoken": cam,
+        "carrier_mismatch": lech,
         "dropped_transitions": bo_qua,
         "findings": findings,
     }

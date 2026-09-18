@@ -11,7 +11,8 @@ Bốn nguyên tắc áp cho toàn bộ thư viện:
 NT-7: chỉ số văn phong là công cụ CHẨN ĐOÁN, không phải mục tiêu đưa cho
 Writer. Đưa ngưỡng thống kê (σ độ dài câu, tỉ lệ mệnh đề phụ) vào prompt sẽ
 sinh ra văn xuôi thoả mãn con số và đọc như máy (§10.3.2). Vì vậy WRITER_TMPL
-nhận `register` và `signature_lexicon` nhưng KHÔNG nhận các khoảng số.
+nhận `register` và `voice_exemplars` nhưng KHÔNG nhận các khoảng số — và cũng
+không nhận `signature_lexicon`: đó là thước đo, không phải nguyên liệu.
 
 Dùng `.format_map()` với dict, không `.format(**kw)`: template có dấu ngoặc
 nhọn trong ví dụ JSON, và `.format` sẽ vấp chúng.
@@ -42,11 +43,15 @@ thuật nội tâm, ý định hay cảm xúc của nhân vật đó.
 ## GIỌNG NHÂN VẬT
 Mỗi nhân vật có `voice_reminder`:
 - không được dùng từ trong `forbidden_lexicon`
-- dấu vết của `signature_lexicon` xuất hiện trong THOẠI của chính nhân vật đó.
-  KHÔNG rải các cụm này vào lời kể, kể cả khi nhân vật đó là người kể: lời kể
-  mang giọng nhân vật qua cách chọn chi tiết và nhịp câu, không qua khẩu ngữ.
+- câu mẫu trong `voice_exemplars` cho thấy người này nói theo CÁCH nào. Bắt
+  chước cách nói ấy bằng chữ của cảnh này; KHÔNG chép lại câu mẫu, và KHÔNG
+  mang cách nói ấy vào lời kể: lời kể mang giọng nhân vật qua cách chọn chi
+  tiết và nhịp câu, không qua khẩu ngữ.
 - giữ đúng `register` và `syntactic_tic`
 Dùng phản ứng cơ thể trong `somatic_allowed`. CẤM mọi biểu hiện trong
+Cử chỉ nhận dạng dùng TỐI ĐA MỘT LẦN trong CẢ CHƯƠNG, và chỉ ở chỗ nhân vật
+mất tự chủ nhất. Ở mọi cảnh khác, dùng ngôn ngữ cơ thể khác hoặc một chi tiết
+ngoại cảnh: một cử chỉ có mặt ở mọi cảnh thì không còn nhận dạng ai nữa.
 `somatic_forbidden` — đó là sáo ngữ; thay bằng một mục trong `somatic_allowed`.
 
 ## NHIỆM VỤ TỰ SỰ
@@ -79,7 +84,13 @@ Cần ≥{sensory_channels_required} kênh giác quan, phải có ít nhất m�
 không phải thị giác.
 Không quá 3 câu trong cảnh được mở đầu bằng "Khi", "Trong khi" hoặc
 "Sau khi". Với các câu còn lại, đặt chủ ngữ hoặc hành động lên đầu.
-Subtext: {subtext_requirement}
+KHÔNG mở đầu cảnh bằng một con số trần.
+Thoại dùng gạch đầu dòng “—”, không dùng ngoặc kép.
+Không lặp lại NGUYÊN VĂN một cụm nào của chính mình quá hai lần trong cảnh: người ta nhận ra một giọng nói qua vài dấu vết, không qua một câu được đóng dấu lại.
+Cảnh này phải khác các cảnh trước ở TRẠNG THÁI, không chỉ ở câu chữ: nếu vẫn
+cùng người, cùng chỗ, cùng mục đích, thì phải có một thứ đổi hẳn — ai đó biết
+thêm điều gì, mất thứ gì, hoặc buộc phải chọn.
+{ngan_sach}{next_chapter}Subtext: {subtext_requirement}
 Cụm từ bị cấm trong cảnh này: {forbidden_cliches}
 
 ## TIN TỨC NGƯỜI KỂ VỪA NGHE
@@ -89,6 +100,9 @@ người kể NHẬN tin ngay trong cảnh, không kể lại như điều đã 
 
 ## BỐI CẢNH ĐÃ XẢY RA
 Cảnh liền trước: {recent_scenes}
+Cảnh CŨ mà chính POV đã sống qua, liên quan tới cảnh này: {callbacks}
+  Dùng chúng để GỌI LẠI một chi tiết, không để DỰNG LẠI một cảnh. Nếu
+  không có chi tiết nào đáng gọi lại thì bỏ qua — nhắc cho đủ là lặp.
 Các chương gần đây: {recent_chapters}
 Bối cảnh xa: {arc_history}
 Sự thật POV nắm được: {known_facts}

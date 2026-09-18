@@ -39,7 +39,14 @@ LEAK_PATTERNS = [
     # không `\s*` khớp rỗng ngay sau "lòng" rồi lookahead kiểm tại " của mình"
     # — thấy dấu cách chứ không thấy "của", nên guard không bao giờ chặn và
     # "giấu tấm thẻ trong lòng của mình" bị báo nhầm là rò rỉ nội tâm.
-    r"trong (?:thâm tâm|đầu|lòng)(?:\s*[,:;]\s*|\s+)(?!của (?:mình|tôi|anh ấy)\b)",
+    # "lòng" còn là danh từ chỉ phần lõm vật lý: "lòng bàn tay", "lòng
+    # sông", "lòng đường". Lượt viết lại Chương 1 escalate hai lần chỉ vì
+    # "mép giấy bị siết chặt trong lòng bàn tay Kaelen" — báo động giả đúng
+    # kiểu P2, và ở đây nó không gây nhiễu mà CHẶN hẳn cả chương.
+    r"trong (?:thâm tâm|đầu|lòng)(?:\s*[,:;]\s*|\s+)"
+    r"(?!của (?:mình|tôi|anh ấy)\b)"
+    r"(?!(?:bàn tay|bàn chân|đất|sông|suối|hồ|biển|đường|phố|chảo|thuyền|tàu|"
+    r"khoang|ống|máng|núi|hang|giếng|chậu|khay|xe|nhà)\b)",
     r"(?:thực ra|sự thật là) .{1,40} đang (?:nói dối|che giấu)",
 ]
 INTERIOR_PATTERN = LEAK_PATTERNS[2]

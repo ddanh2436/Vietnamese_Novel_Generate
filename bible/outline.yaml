@@ -106,3 +106,158 @@ chapters:
         location: LOC_REACTOR_3
         present: [CHAR_KAELEN]
         goals: {CHAR_KAELEN: "Đối diện với khoang Lõi lần đầu sau hai năm"}
+
+  - chapter: 3
+    title: "Sổ ca trực"
+    outline_beat: >
+      Trong Lò 3, Kaelen tìm ra chín giờ bị ghi đè trong nhật ký vận hành. Vhal
+      được cử tới niêm phong hiện trường và phải đứng giữa quy trình với điều
+      ông ta biết. Serena, ở Trạm Chốt, lo bản sao nhật ký rời khỏi Lò 3.
+    secrets:
+      CHAR_VHAL: ["đã bán ba giấy phép quá cảnh cho người của Lõi Rạng"]
+      CHAR_SERENA: ["chữ ký thứ ba trên lệnh xả áp là của cô"]
+    scenes:
+      - pov: CHAR_KAELEN
+        location: LOC_REACTOR_3
+        present: [CHAR_KAELEN]
+        props: ["sổ ca trực bìa cứng", "băng ghi âm nền", "đồng hồ đo áp suất"]
+        goals: {CHAR_KAELEN: "Đối chiếu giờ trong sổ với băng ghi nền"}
+
+      - pov: CHAR_KAELEN
+        location: LOC_REACTOR_3
+        present: [CHAR_KAELEN, CHAR_VHAL]
+        props: ["lệnh niêm phong", "con dấu đồng thau"]
+        goals:
+          CHAR_KAELEN: "Biết ai ra lệnh niêm phong khu vực này"
+          CHAR_VHAL: "Đóng dấu, ghi biên bản, và rời đi trước ca sau"
+        hidden_actions:
+          CHAR_VHAL: "gỡ một tờ biên nhận khỏi tập hồ sơ rồi gập vào túi trong"
+
+      - pov: CHAR_VHAL
+        location: LOC_REACTOR_3
+        present: [CHAR_VHAL]
+        props: ["tập biên bản", "bút dấu"]
+        goals: {CHAR_VHAL: "Ghi biên bản sao cho tên mình không dính vào đêm đó"}
+
+      - pov: CHAR_SERENA
+        location: LOC_VEDA_CHECKPOINT
+        present: [CHAR_SERENA]
+        props: ["bảng điều phối tuyến", "chiếc nhẫn dấu"]
+        goals: {CHAR_SERENA: "Chặn mọi bản sao nhật ký rời Lò 3 mà không ra lệnh bằng văn bản"}
+        hidden_actions:
+          CHAR_SERENA: "hạ mức ưu tiên tuyến đường sắt xuống mức bảo trì"
+
+      - pov: CHAR_KAELEN
+        location: LOC_REACTOR_3
+        present: [CHAR_KAELEN, CHAR_VHAL]
+        goals:
+          CHAR_KAELEN: "Ép Vhal nói ai gửi lệnh niêm phong tới"
+          CHAR_VHAL: "Trả lời đủ đúng thủ tục để không phải trả lời thật"
+
+      - pov: CHAR_KAELEN
+        location: LOC_REACTOR_3
+        present: [CHAR_KAELEN]
+        props: ["giấy than", "sổ ca trực bìa cứng"]
+        goals: {CHAR_KAELEN: "Mang được một bản sao chín giờ đó ra khỏi Lò 3"}
+
+  - chapter: 4
+    title: "Ba chữ ký"
+    outline_beat: >
+      Kaelen đưa bản sao ngược về Trạm Chốt Vệ Đà. Một sự cố phong toả buộc anh
+      và Serena phải xoay xở cùng nhau trong nhiều giờ. Cuối chương, Serena ở
+      lại một mình với bản lưu lệnh xả áp — nơi có ba nét bút trong hai ô kẻ sẵn.
+    secrets:
+      CHAR_SERENA: ["chữ ký thứ ba trên lệnh xả áp là của cô"]
+    time_overrides:
+      4:
+        duration_ticks: 7
+    scenes:
+      - pov: CHAR_KAELEN
+        location: LOC_REACTOR_3
+        present: [CHAR_KAELEN]
+        props: ["bản sao giấy than", "ba lô"]
+        goals: {CHAR_KAELEN: "Rời Lò 3 trước khi lệnh niêm phong có hiệu lực"}
+
+      - pov: CHAR_KAELEN
+        location: LOC_VEDA_CHECKPOINT
+        present: [CHAR_KAELEN, CHAR_VHAL]
+        props: ["mẫu bảy ba", "khay giấy tờ"]
+        goals:
+          CHAR_KAELEN: "Qua chốt mà bản sao không bị giữ lại"
+          CHAR_VHAL: "Không phải là người ký cái giấy sẽ bị hỏi lại sau này"
+
+      - pov: CHAR_SERENA
+        location: LOC_VEDA_CHECKPOINT
+        present: [CHAR_SERENA]
+        props: ["bản lưu lệnh xả áp", "đèn bàn"]
+        goals: {CHAR_SERENA: "Biết Kaelen đang mang theo chính xác cái gì"}
+
+      - pov: CHAR_KAELEN
+        location: LOC_VEDA_CHECKPOINT
+        present: [CHAR_KAELEN, CHAR_SERENA]
+        goals:
+          CHAR_KAELEN: "Hỏi thẳng vì sao cô huỷ lời khai hai năm trước"
+          CHAR_SERENA: "Trả lời mà không để anh đi tiếp về phía Thánh đường"
+
+      - pov: CHAR_KAELEN
+        location: LOC_VEDA_CHECKPOINT
+        present: [CHAR_KAELEN, CHAR_SERENA]
+        props: ["máy phát dự phòng", "cửa chắn thép"]
+        goals:
+          CHAR_KAELEN: "Giữ cho bản sao không ướt, không rách, không bị thu"
+          CHAR_SERENA: "Đưa cả hai ra khỏi khu phong toả còn sống"
+
+      - pov: CHAR_SERENA
+        location: LOC_VEDA_CHECKPOINT
+        present: [CHAR_SERENA]
+        props: ["bản lưu lệnh xả áp", "con dấu Mật Văn"]
+        goals: {CHAR_SERENA: "Quyết định huỷ bản lưu hay giữ nó lại"}
+        hidden_actions:
+          CHAR_SERENA: "so nét bút thứ ba với chữ ký của chính mình trên giấy tờ khác"
+
+  - chapter: 5
+    title: "Ánh sáng ở Thánh đường"
+    outline_beat: >
+      Thánh đường Đổ nát: nơi lưu trữ bản gốc. Con dấu ăn mòn và ba chữ ký cùng
+      được đọc ra. Tin từ Tổng Cục về nhật ký bị ghi đè tới tay Kaelen đúng lúc
+      anh đã tự dựng xong bản án nặng hơn cho chính mình.
+    secrets:
+      CHAR_SERENA: ["chữ ký thứ ba trên lệnh xả áp là của cô"]
+    scenes:
+      - pov: CHAR_KAELEN
+        location: LOC_VEDA_CHECKPOINT
+        present: [CHAR_KAELEN]
+        goals: {CHAR_KAELEN: "Đi được tới Thánh đường trước khi chốt đổi ca"}
+
+      - pov: CHAR_KAELEN
+        location: LOC_RUINED_CATHEDRAL
+        present: [CHAR_KAELEN, CHAR_SERENA]
+        props: ["cửa hầm lưu trữ", "đèn dầu"]
+        goals:
+          CHAR_KAELEN: "Vào được phòng lưu trữ bản gốc"
+          CHAR_SERENA: "Đi cùng anh, để biết anh tìm thấy gì trước khi anh kịp nói ra"
+
+      - pov: CHAR_KAELEN
+        location: LOC_RUINED_CATHEDRAL
+        present: [CHAR_KAELEN]
+        props: ["con dấu niêm phong khoang Lõi", "kính lúp"]
+        goals: {CHAR_KAELEN: "Hiểu vết ăn mòn trên con dấu nghĩa là gì"}
+
+      - pov: CHAR_SERENA
+        location: LOC_RUINED_CATHEDRAL
+        present: [CHAR_SERENA]
+        props: ["lò sưởi gạch", "bản lưu lệnh xả áp"]
+        goals: {CHAR_SERENA: "Chọn giữa đốt bản lưu và đưa nó cho anh"}
+
+      - pov: CHAR_KAELEN
+        location: LOC_RUINED_CATHEDRAL
+        present: [CHAR_KAELEN, CHAR_SERENA]
+        props: ["lệnh xả áp bản gốc"]
+        goals:
+          CHAR_KAELEN: "Đọc tên người ký thứ ba"
+          CHAR_SERENA: "Nói ra trước khi anh đọc"
+
+      - pov: CHAR_KAELEN
+        location: LOC_RUINED_CATHEDRAL
+        present: [CHAR_KAELEN]
+        goals: {CHAR_KAELEN: "Quyết định công bố hay không, khi biết cái giá là ai"}

@@ -81,6 +81,10 @@ voice:
     - "ca trực"
     - "không phải nếu"
     - "đúng giờ đó"
+  voice_exemplars:
+    - "Sáu giờ sáng chốt đóng. Tôi cần qua trước đó."
+    - "Ai ký vào dòng này."
+    - "Anh vừa nói hai câu ngược nhau. Tôi nghe cả hai."
   forbidden_lexicon:
     - "có lẽ"
     - "tôi nghĩ rằng"

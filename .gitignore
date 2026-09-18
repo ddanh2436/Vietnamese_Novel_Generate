@@ -41,3 +41,8 @@ Desktop.ini
 .DS_Store
 *.log
 *.tmp
+
+# Mã nguồn tham khảo tải về — không thuộc dự án này.
+*.zip
+*.7z
+*.rar

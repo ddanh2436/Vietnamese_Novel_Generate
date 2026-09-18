@@ -41,6 +41,8 @@ class ChapterState(TypedDict, total=False):
     # và cho câu hỏi "Writer có sửa được sau phản hồi không".
     audit_log: Annotated[list[dict], operator.add]
     polish_report: dict            # nhận/từ chối bản Polish và lý do
+    # Ký tự rác code đã dọn ở Writer — ghi ra để tác giả thấy (NT-13).
+    hygiene_notes: Annotated[list[dict], operator.add]
     # Bản nháp bị chặn sau MAX_REVISIONS, kèm lỗi — thứ tác giả cần đọc.
     escalated_scene: dict
     # LangGraph BỎ QUA mọi khoá không khai trong TypedDict — node trả về khoá lạ

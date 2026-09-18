@@ -44,6 +44,9 @@ class Engines:
     # Tầng hai của Auditor (§9.2). Tắt được: nó tốn một lượt gọi mỗi bản nháp,
     # và tầng thuật toán vẫn đứng một mình được.
     llm_audit: bool = True
+    # Dò lặp cảnh (§4.3). Tắt khi chạy fixture tổng hợp: văn xuôi của FakeLLM
+    # lặp theo thiết kế, nên mọi cảnh sau cảnh 0 đều bị viết lại vô ích.
+    repetition_check: bool = True
 
     @property
     def total_chapters(self) -> int:
@@ -72,7 +75,8 @@ class Engines:
         self.vocabulary = load_vocabulary(self.bible_dir)
         self.firewall = POVFirewall(graph)
         self.assembler = ContextAssembler(
-            graph, self.store, self.budget or MemoryBudget.for_vietnamese())
+            graph, self.store, self.budget or MemoryBudget.for_vietnamese(),
+            planner=self.planner)
         self.replayed = replay_committed(graph, chars, self.store)
         return self.replayed
 
@@ -90,7 +94,8 @@ def build_engines(llm, *, bible_dir: Path | str | None = None,
         graph=graph, store=store, chars=chars,
         planner=OutlinePlanner(),
         firewall=POVFirewall(graph),
-        assembler=ContextAssembler(graph, store, budget),
+        assembler=ContextAssembler(graph, store, budget,
+                                   planner=OutlinePlanner()),
         llm=llm, meta=meta,
         bible_dir=Path(bible_dir) if bible_dir else None, budget=budget,
         vocabulary=load_vocabulary(bible_dir),

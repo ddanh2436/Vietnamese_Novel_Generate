@@ -70,6 +70,10 @@ class KichBan(FakeLLM):
 
 def _chay(llm, **flags):
     eng = build_engines(llm, db_path=":memory:")
+    # Văn xuôi FakeLLM dựng từ cùng một kho câu nhỏ nên các cảnh CÙNG CHỖ
+    # trùng nhau thật (§4.3). Tắt dò lặp ở fixture tổng hợp; test Ngày 21
+    # kiểm cơ chế đó bằng một LLM lặp có chủ đích.
+    eng.repetition_check = False
     for k, v in flags.items():
         setattr(eng, k, v)
     return eng, run_chapter(eng, 1)
@@ -375,7 +379,8 @@ def test_writer_chi_nhan_rang_buoc_menh_de_phu_khong_nhan_nguong_so():
 def test_cli_write_escalate_giu_ban_nhap_bi_chan(tmp_path, monkeypatch, capsys):
     import cli
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(cli, "_llm", lambda _name: KichBan(writer={1: [LEAK] * 5}))
+    monkeypatch.setattr(cli, "_llm",
+                        lambda _name, *a, **kw: KichBan(writer={1: [LEAK] * 5}))
     db = str(tmp_path / "t.db")
     assert cli.main(["write", "--chapter", "1", "--db", db]) == 1
 
@@ -414,14 +419,16 @@ def test_writer_khong_duoc_rai_lexicon_dac_trung_vao_loi_ke():
     """Lượt Gemini Chương 2, CH002_S03 (POV Serena): lời kể nhồi "Theo thẩm
     quyền…", "Hồ sơ cho thấy…" — từ đặc trưng của THOẠI. Prompt cũ đòi chúng
     "phải xuất hiện" mà không nói ở đâu, nên lần viết lại không sửa được."""
-    assert "trong THOẠI của chính nhân vật" in WRITER_TMPL
-    assert "KHÔNG rải các cụm này vào lời kể" in WRITER_TMPL
+    assert "mang cách nói ấy vào lời kể" in WRITER_TMPL
+    # Và nay còn đi xa hơn: Writer không còn nhìn thấy danh sách khẩu ngữ nào
+    # để mà rải. Xem `test_writer_khong_con_nhan_thuoc_do_giong`.
+    assert "signature_lexicon" not in WRITER_TMPL
 
 
 def _ch(cid, name):
     return {"id": cid, "name": name, "voice_reminder": {
         "register": "formal", "syntactic_tic": "",
-        "signature_lexicon": ["theo thẩm quyền", "hồ sơ cho thấy"],
+        "voice_exemplars": ["Tôi hiểu, tuy nhiên hồ sơ đã được lưu."],
         "forbidden_lexicon": ["vinh quang"]}}
 
 
@@ -430,8 +437,24 @@ def test_canh_mot_minh_khong_dua_lexicon_dac_trung_cho_writer():
     chỉ có một nhân vật, nên "chỉ dùng trong thoại" là ràng buộc không thể thoả."""
     from novel_engine.graph.nodes import _characters_brief
     solo = _characters_brief([_ch("CHAR_SERENA", "Serena")])
-    assert "theo thẩm quyền" not in solo and "MỘT MÌNH" in solo
+    assert "tuy nhiên hồ sơ" not in solo and "MỘT MÌNH" in solo
     assert "vinh quang" in solo                     # từ CẤM vẫn giữ
 
     doi = _characters_brief([_ch("CHAR_SERENA", "Serena"), _ch("CHAR_KAELEN", "Kaelen")])
-    assert "theo thẩm quyền" in doi and "chỉ trong THOẠI" in doi
+    assert "tuy nhiên hồ sơ" in doi and "không phải câu để chép lại" in doi
+
+
+def test_writer_khong_con_nhan_thuoc_do_giong():
+    """`signature_lexicon` là THƯỚC ĐO, không phải nguyên liệu.
+
+    M3 chấm giọng bằng phân bố của chính danh sách ấy, và ngân sách tật ngôn
+    ngữ đếm theo nó. Suốt Arc 1 ta vừa đo bằng thước vừa đưa thước cho người
+    bị đo — rồi ngạc nhiên vì Serena dùng cả năm cụm, mỗi cụm ba lần. Nay
+    Writer chỉ nhận CÂU MẪU: mẫu dạy cách nói, danh sách dạy dùng lại từ nào.
+    """
+    from novel_engine.graph.nodes import _characters_brief
+
+    c = _ch("CHAR_SERENA", "Serena")
+    c["voice_reminder"]["signature_lexicon"] = ["theo thẩm quyền", "hồ sơ cho thấy"]
+    ra = _characters_brief([c, _ch("CHAR_KAELEN", "Kaelen")])
+    assert "theo thẩm quyền" not in ra

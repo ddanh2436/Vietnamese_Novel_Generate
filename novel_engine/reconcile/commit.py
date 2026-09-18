@@ -88,7 +88,7 @@ def apply_delta(delta: StateDelta, graph, chars: dict, frames) -> dict:
     prov = f"extracted_ch{ch}"
     applied = {"entities": 0, "relations": 0, "truths": 0, "beliefs": 0,
                "claims": 0, "retracted": 0, "clues_touched": 0,
-               "clue_transitions": 0}
+               "clue_transitions": 0, "understood_by": 0}
 
     # Thứ tự trong `classification` là thực thể → quan hệ → mệnh đề (thứ tự
     # `classify_delta` duyệt), nên đầu mút luôn tồn tại trước khi quan hệ ghi.
@@ -152,6 +152,7 @@ def apply_delta(delta: StateDelta, graph, chars: dict, frames) -> dict:
         touched[pe.clue_id] = max(touched.get(pe.clue_id, 0.0), inten)
         if pe.surface_form:
             graph.record_surface_form(pe.clue_id, pe.surface_form)
+        applied["understood_by"] += _ghi_nhan_hieu(clue, pe, chars)
     for cid, inten in sorted(touched.items()):
         clue = graph.clues[cid]
         # Nhắc thoáng qua không khôi phục trí nhớ độc giả bằng một cảnh nhấn
@@ -184,6 +185,33 @@ def apply_delta(delta: StateDelta, graph, chars: dict, frames) -> dict:
         applied["relationship_transitions"] = rel["transitions"]
 
     return applied
+
+
+def _ghi_nhan_hieu(clue, pe, chars: dict) -> int:
+    """`concluded_by` → `understood_by_characters`.
+
+    Extractor khai ai đã RÚT RA KẾT LUẬN từ một manh mối, mục ấy được parse vào
+    `PlantEvidence`… rồi không ai đọc. `understood_by_characters` — thứ quyết
+    định nhân vật nào được phép nhắc tới manh mối ở chương sau (§5.4.1, và
+    `known_by` ở networkx_graph) — không bao giờ được cập nhật. Cả một vòng đời
+    tri thức nằm chết trong một trường được điền đủ.
+
+    Chỉ ghi khi span ĐÃ XÁC MINH (NT-5): ai đó hiểu ra điều gì là chuyện phải
+    có trên trang giấy, không phải chuyện model tuyên bố.
+
+    Mã nhân vật được chuẩn hoá hoa-thường trước khi đối chiếu: lượt viết lại
+    Arc 1 trả về "CHAR_KAELen", và vì không ai đọc trường này nên chẳng ai kêu.
+    """
+    if not chars:
+        return 0
+    tra = {c.upper(): c for c in chars}
+    them = 0
+    for cid in pe.concluded_by:
+        that = tra.get(str(cid).strip().upper())
+        if that and that not in clue.understood_by_characters:
+            clue.understood_by_characters.append(that)
+            them += 1
+    return them
 
 
 def derive_clue_transitions(delta: StateDelta, clues: dict) -> tuple[dict, list[dict]]:

@@ -75,12 +75,24 @@ voice:
     - "cứ theo đúng mẫu"
     - "tôi còn mười một tháng"
     - "sổ sách nó vậy"
+  verbal_tics:
+    - "được chưa"
+    - "tôi chỉ làm theo thủ tục"
+  voice_exemplars:
+    - "Người ta bảo tôi đóng cái dấu ấy thì tôi đóng, chứ tôi biết gì đâu, phải không?"
+    - "Anh cứ đứng đây thì tôi cũng chẳng giúp gì được, mà tôi thì còn cả đống giấy chưa vào sổ."
   forbidden_lexicon:
     - "theo thẩm quyền"
     - "về mặt thủ tục"
     - "dung sai"
     - "vinh quang"
-  syntactic_tic: "hay chốt câu bằng một câu hỏi tu từ ngắn: '..., được chưa?'"
+  # Không trích nguyên văn khẩu ngữ ở đây: trường này ĐI VÀO prompt Writer,
+  # nên trích tức là giao lại đúng cụm mà ngân sách tật ngôn ngữ đang đếm.
+  # Đo được: bỏ `signature_lexicon` khỏi prompt thì mật độ cụm đặc trưng
+  # tụt từ 15 xuống 3 trên 1000 từ, riêng "được chưa" vẫn 7 lần — nó vào
+  # bằng cửa này.
+  syntactic_tic: "hay chốt câu bằng một câu hỏi tu từ ngắn hất ngược về
+    phía người nghe"
   question_ratio: [0.25, 0.45]
   self_reference_rate: 0.28
   under_stress_shift: >

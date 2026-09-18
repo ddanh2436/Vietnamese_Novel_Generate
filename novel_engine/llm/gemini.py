@@ -77,6 +77,24 @@ warnings.filterwarnings("ignore", message=".*automatic function calling.*")
 warnings.filterwarnings("ignore", message=".*uses fixed sampling defaults.*")
 
 
+def _tam_thoi(e: Exception) -> bool:
+    """Lỗi này thử lại có ích không.
+
+    429 dù đã điều tiết → hạn ngạch ngày, hoặc Google vừa siết; chờ rồi thử
+    lại là đúng. 503/UNAVAILABLE ("model đang quá tải") cũng vậy, và nó KHÔNG
+    phải trường hợp hiếm: lượt đầu tiên chạy `gemini-3.8-flash` cho vai Writer
+    chết đúng vì nó — dòng flash chia sẻ công suất hẹp hơn hẳn dòng flash-lite.
+    Bản trước chỉ bắt 429, nên một cơn quá tải hai giây giết cả chương.
+
+    Mọi thứ khác — khoá sai, prompt hỏng, model không tồn tại — thử lại chỉ
+    tốn thêm thời gian để thất bại y hệt, nên ném lên ngay.
+    """
+    t = str(e).lower()
+    return ("429" in t or "quota" in t
+            or "503" in t or "unavailable" in t or "overloaded" in t
+            or "500" in t or "internal error" in t)
+
+
 class _RateLimiter:
     """Cửa sổ trượt, chặn đủ lâu để không vượt `rpm` lượt mỗi phút.
 
@@ -114,7 +132,8 @@ class GeminiLLM:
     def __init__(self, model: str = DEFAULT_MODEL, *,
                  api_key: str | None = None, rpm: int | None = None,
                  max_output_tokens: int = 4000,
-                 max_retries: int = 3) -> None:
+                 max_retries: int = 3,
+                 role_models: dict[str, str] | None = None) -> None:
         load_dotenv()                      # không ghi đè biến đã có sẵn
         key = api_key or gemini_api_key()
         if not key:
@@ -130,31 +149,54 @@ class GeminiLLM:
         # số cho mọi model là cách chắc chắn ăn 429 trên dòng flash, hoặc phí
         # nửa thời gian chờ vô ích trên dòng flash-lite.
         self.rpm = rpm if rpm is not None else RPM_BY_MODEL.get(model, DEFAULT_RPM)
-        self._limiter = _RateLimiter(self.rpm)
-        self._clients: dict[float, object] = {}      # nhiệt độ → client
+        # Model theo VAI TRÒ. Ghi chú về DEFAULT_MODEL ở trên đúng cho TOÀN BỘ
+        # vòng lặp: dòng flash chậm gấp 13 lần nên đổi hết là không trả giá nổi.
+        # Nhưng Writer chỉ chiếm 6 trong 26 lượt của một chương, và nó là lượt
+        # DUY NHẤT sinh ra văn xuôi — 20 lượt còn lại đọc JSON, nơi model mạnh
+        # hơn gần như không đổi gì. Đặt model mạnh cho riêng một vai trò vì thế
+        # tốn khoảng 6×52s thay vì 26×52s.
+        self.role_models = dict(role_models or {})
+        self._rpm_of = {model: self.rpm}
+        # Trần RPM theo TỪNG model, không dùng chung: một limiter 15 RPM dùng
+        # chung sẽ ném lượt Writer của model 4 RPM thẳng vào 429.
+        self._limiters: dict[str, _RateLimiter] = {model: _RateLimiter(self.rpm)}
+        self._clients: dict[tuple[str, float], object] = {}
         self.calls: list[dict] = []
 
-    def _client(self, temperature: float):
-        """Một client cho mỗi nhiệt độ, dựng lười. `ChatGoogleGenerativeAI`
-        chốt nhiệt độ lúc khởi tạo, nên không tái dùng chung được."""
-        if temperature not in self._clients:
+    def _limiter_of(self, model: str) -> "_RateLimiter":
+        if model not in self._limiters:
+            r = RPM_BY_MODEL.get(model, DEFAULT_RPM)
+            self._rpm_of[model] = r
+            self._limiters[model] = _RateLimiter(r)
+        return self._limiters[model]
+
+    def _client(self, model: str, temperature: float):
+        """Một client cho mỗi cặp (model, nhiệt độ), dựng lười.
+        `ChatGoogleGenerativeAI` chốt cả hai lúc khởi tạo."""
+        khoa = (model, temperature)
+        if khoa not in self._clients:
             from langchain_google_genai import ChatGoogleGenerativeAI
-            self._clients[temperature] = ChatGoogleGenerativeAI(
-                model=self.model_name, google_api_key=self._key,
+            self._clients[khoa] = ChatGoogleGenerativeAI(
+                model=model, google_api_key=self._key,
                 temperature=temperature,
                 max_output_tokens=self.max_output_tokens)
-        return self._clients[temperature]
+        return self._clients[khoa]
+
+    def model_for(self, role: str) -> str:
+        return self.role_models.get(role, self.model_name)
 
     def invoke(self, prompt: str, *, role: str = "") -> str:
         temp = _TEMPERATURE.get(role, DEFAULT_TEMPERATURE)
-        client = self._client(temp)
+        model = self.model_for(role)
+        client = self._client(model, temp)
 
         last: Exception | None = None
         for attempt in range(self.max_retries):
-            waited = self._limiter.acquire()
+            waited = self._limiter_of(model).acquire()
             try:
                 resp = client.invoke(prompt)
-                self.calls.append({"role": role, "temperature": temp,
+                self.calls.append({"role": role, "model": model,
+                                   "temperature": temp,
                                    "waited": round(waited, 2)})
                 content = resp.content
                 # Gemini có thể trả content dạng list block thay vì chuỗi.
@@ -165,12 +207,21 @@ class GeminiLLM:
                 return content or ""
             except Exception as e:                     # noqa: BLE001
                 last = e
-                if "429" not in str(e) and "quota" not in str(e).lower():
+                if not _tam_thoi(e):
                     raise
-                # 429 dù đã điều tiết → hạn ngạch ngày, hoặc Google vừa siết.
                 # Lùi theo cấp số nhân rồi thử lại; hết lượt thì ném lên để
                 # `safe_node` biến thành escalation chứ không thành stack trace.
                 time.sleep(2 ** attempt * 5)
+        # Nói đúng nguyên nhân. Bản trước gán mọi thất bại cho hạn ngạch, nên
+        # một cơn quá tải của dòng flash hiện ra thành "hết hạn ngạch ngày" và
+        # gửi người đọc đi sai hướng suốt cả buổi.
+        t = str(last).lower()
+        if "503" in t or "unavailable" in t or "overloaded" in t:
+            raise RuntimeError(
+                f"{model} đang quá tải phía Google (503) — đã thử "
+                f"{self.max_retries} lần. Dòng flash chia sẻ công suất hẹp hơn "
+                f"flash-lite; thử lại sau, hoặc bỏ --writer-model để quay về "
+                f"{DEFAULT_MODEL}. Chi tiết: {last}")
         raise RuntimeError(
             f"Gemini từ chối sau {self.max_retries} lần thử (có thể đã hết hạn "
             f"ngạch ngày của bậc miễn phí): {last}")

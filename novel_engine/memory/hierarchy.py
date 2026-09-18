@@ -38,6 +38,7 @@ class MemoryBudget:
     l2_recent_chapters: int = 900     # 5 chương gần nhất
     l3_arcs: int = 700                # toàn bộ arc đã đóng
     l4_facts: int = 1500              # fact truy vấn theo cảnh
+    l5_callbacks: int = 500           # cảnh cũ gọi lại theo nội dung
     character_sheets: int = 1800      # hồ sơ nhân vật có mặt
     clue_directives: int = 400
     style_exemplars: int = 800        # trích đoạn văn phong mẫu

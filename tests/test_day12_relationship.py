@@ -250,6 +250,10 @@ def test_parse_khoan_dung_su_kien_quan_he():
 @pytest.fixture
 def eng():
     e = build_engines(FakeLLM(), db_path=":memory:")
+    # Văn xuôi FakeLLM dựng từ cùng một kho câu nhỏ nên các cảnh CÙNG CHỖ
+    # trùng nhau thật (§4.3). Tắt dò lặp ở fixture tổng hợp; test Ngày 21
+    # kiểm cơ chế đó bằng một LLM lặp có chủ đích.
+    e.repetition_check = False
     yield e
     e.store.close()
 

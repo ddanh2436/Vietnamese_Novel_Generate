@@ -22,8 +22,14 @@ from novel_engine.audit.timeline_rules import check_continuity
 from novel_engine.canon.models import Assertion, Entity, Relation, StateDelta
 from novel_engine.canon.timeline import ContinuityFrame
 from novel_engine.graph.build import run_chapter
+from novel_engine.eval.debt import story_debt
+from novel_engine.eval.harness import evaluate
+from novel_engine.eval.regression import run_regression
+from novel_engine.graph.checkpoint import (
+    CHECKPOINT_DB, chapter_thread, drop_thread, open_checkpointer, thread_status,
+)
 from novel_engine.graph.engines import build_engines
-from novel_engine.reconcile.classify import classify_delta
+from novel_engine.reconcile.classify import classify_delta, downstream_chapters
 from novel_engine.reconcile.commit import reconcile
 from novel_engine.audit.deterministic import (
     audit_contract, audit_stats, deterministic_audit,
@@ -35,9 +41,10 @@ OUT_CHAPTERS = Path("output/chapters")
 OUT_REPORTS = Path("output/reports")
 
 
-def _llm(name: str):
+def _llm(name: str, writer_model: str = ""):
     from novel_engine.llm.gemini import build_llm
-    return build_llm(name)
+    kw = {"role_models": {"writer": writer_model}} if writer_model else {}
+    return build_llm(name, **kw)
 
 
 def _render_markdown(eng, chapter: int, scene_outputs: list[dict]) -> str:
@@ -67,6 +74,7 @@ def _audit_summary(out: dict) -> dict:
                                if s.get("polish", {}).get("accepted")),
         "residual_major": sum(1 for s in scenes for f in s.get("residual", [])
                               if f["severity"] == "major"),
+        "hygiene": out.get("hygiene_notes", []),
         "scenes": scenes,
         "log": out.get("audit_log", []),
     }
@@ -75,7 +83,8 @@ def _audit_summary(out: dict) -> dict:
 # ═══════════════════════════ write ═══════════════════════════
 
 def cmd_write(args) -> int:
-    eng = build_engines(_llm(args.llm), db_path=args.db)
+    eng = build_engines(_llm(args.llm, getattr(args, "writer_model", "")),
+                        db_path=args.db)
     try:
         # Idempotency (§16.1 CP-2): chạy lại một chương đã có là thao tác PHÁ
         # HUỶ — nó xoá frame, digest và delta của bản cũ. Phải nói ra rõ ràng.
@@ -99,7 +108,31 @@ def cmd_write(args) -> int:
                   f"{args.chapter - 1}` trước nếu muốn.", file=sys.stderr)
         print(f"Viết chương {args.chapter} · backend={args.llm} · db={args.db}")
         t0 = time.time()
-        out = run_chapter(eng, args.chapter)
+        if args.no_checkpoint:
+            out = run_chapter(eng, args.chapter)
+        else:
+            with open_checkpointer(args.checkpoint_db) as cp:
+                tt = thread_status(cp, args.chapter)
+                if args.resume and not tt["exists"]:
+                    print(f"không có checkpoint cho chương {args.chapter} — bỏ "
+                          f"`--resume` để viết từ đầu", file=sys.stderr)
+                    return 2
+                if args.resume and tt["done"]:
+                    print(f"checkpoint chương {args.chapter} đã ở trạng thái XONG; "
+                          f"viết lại bằng `--force`", file=sys.stderr)
+                    return 2
+                if args.resume:
+                    print(f"  [--resume] tiếp tục từ {', '.join(tt['next']) or 'đầu'} "
+                          f"· {tt['scenes_done']} cảnh đã xong")
+                elif tt["exists"]:
+                    # Chạy lại cùng thread mà KHÔNG xoá: LangGraph chạy lại từ
+                    # đầu và CỘNG DỒN lên state cũ — chương ra 12 cảnh, frame
+                    # trùng lặp, không một lỗi nào được ném.
+                    drop_thread(cp, args.chapter)
+                    print(f"  bỏ checkpoint cũ của chương {args.chapter}")
+                out = run_chapter(eng, args.chapter, checkpointer=cp,
+                                  thread_id=chapter_thread(args.chapter),
+                                  resume=args.resume)
         dt = time.time() - t0
 
         if out.get("escalated"):
@@ -190,6 +223,8 @@ def cmd_write(args) -> int:
         print(f"  kiểm toán: {au['revisions']} lần viết lại · polish nhận "
               f"{au['polish_accepted']}/{au['polish_called']} · "
               f"{au['residual_major']} major còn lại")
+        for h in au.get("hygiene", []):
+            print(f"      🧹 {h['scene_id']}: {'; '.join(h['notes'])[:100]}")
         for s in au["scenes"]:
             pr = s.get("polish", {})
             if pr.get("called") and not pr.get("accepted"):
@@ -312,6 +347,72 @@ def _describe(item) -> str:
     return str(item)
 
 
+_DICH_DEN = {
+    "entity": "world graph · thực thể",
+    "relation": "world graph · quan hệ",
+    "truth": "world graph · sự thật khách quan",
+    "belief": "hồ sơ nhân vật · niềm tin",
+    "claim": "lời khai — KHÔNG thành niềm tin của người nói",
+}
+
+
+def _dest(item) -> str:
+    if isinstance(item, Entity):
+        return _DICH_DEN["entity"]
+    if isinstance(item, Relation):
+        return _DICH_DEN["relation"]
+    if item.epistemic == "believed_by":
+        return _DICH_DEN["belief"]
+    if item.epistemic == "claimed_by":
+        return _DICH_DEN["claim"]
+    return _DICH_DEN["truth"]
+
+
+def _diff_lines(delta, out: dict, eng, chapter: int) -> list[str]:
+    """CP-2 (§16.1): "diff ngắn, không phải JSON thô".
+
+    Mỗi dòng trả lời ba câu: ghi gì, xếp hạng gì, và đi đâu. Hạng `improvement`
+    kèm luôn hai lựa chọn của tác giả (CP-4) và danh sách chương bị đụng — quyết
+    định mà không biết cái giá thì không phải quyết định.
+    """
+    dau = {"enrichment": "+", "improvement": "!", "contradiction": "✗"}
+    lines = [f"  Chương {chapter} đề xuất ghi vào canon:"]
+    for k, v in out["classification"].items():
+        try:
+            item = delta.item(k)
+        except KeyError:
+            continue
+        lines.append(f"  {dau.get(v, '?')} {_describe(item)}   [{v}] → {_dest(item)}")
+        if v == "improvement":
+            ds = downstream_chapters(item, eng.planner, chapter)
+            if ds:
+                lines.append(f"      ⚠ đụng kế hoạch chương "
+                             f"{', '.join(str(x) for x in ds)}")
+            lines.append("      [G] Giữ chi tiết mới, sửa kế hoạch hạ nguồn"
+                         "    [B] Bỏ chi tiết, viết lại cảnh")
+        elif v == "contradiction":
+            lines.append("      ✗ chặn ghi CẢ chương — sửa văn xuôi hoặc bible rồi "
+                         "`write --force`")
+    for cid, st in (delta.clue_transitions or {}).items():
+        c = eng.graph.clues.get(cid)
+        lines.append(f"  ~ Manh mối {cid}: → {getattr(st, 'value', st)}"
+                     f"   [code suy ra từ bằng chứng]"
+                     + (f" · hạn trả bài ch{c.payoff_deadline}" if c else ""))
+    n_pe = sum(1 for e in delta.plant_evidence if e.verified)
+    if n_pe:
+        lines.append(f"  ◇ {n_pe} bằng chứng manh mối đã lên trang")
+    if delta.relationship_events:
+        kinds: dict[str, int] = {}
+        for ev in delta.relationship_events:
+            kinds[ev.kind] = kinds.get(ev.kind, 0) + 1
+        lines.append("  ♦ Quan hệ: "
+                     + ", ".join(f"{k}×{n}" for k, n in sorted(kinds.items()))
+                     + "   [chỉ số do code tính]")
+    if len(lines) == 1:
+        lines.append("  (không có mục nào — xem phần trích xuất ở trên)")
+    return lines
+
+
 def cmd_classify(args) -> int:
     """CP-2 (§16.1) — xem TRƯỚC những gì sẽ vào canon, nhóm theo NƠI ĐẾN.
 
@@ -363,39 +464,8 @@ def cmd_classify(args) -> int:
             for x in delta.extraction_issues:
                 if x.get("reason") == "empty_extraction":
                     print(f"      [major] {x['message']}")
-        groups: dict[str, list] = {"entity": [], "relation": [], "truth": [],
-                                   "belief": [], "claim": [], "contradiction": []}
-        for k, v in out["classification"].items():
-            try:
-                item = delta.item(k)
-            except KeyError:
-                continue
-            if v == "contradiction":
-                grp = "contradiction"
-            elif isinstance(item, Assertion) and item.epistemic == "believed_by":
-                grp = "belief"
-            elif isinstance(item, Assertion) and item.epistemic == "claimed_by":
-                grp = "claim"
-            elif isinstance(item, Assertion):
-                grp = "truth"
-            elif isinstance(item, Relation):
-                grp = "relation"
-            else:
-                grp = "entity"
-            groups[grp].append((v, item))
-        titles = [
-            ("entity", "→ WORLD GRAPH · thực thể"),
-            ("relation", "→ WORLD GRAPH · quan hệ"),
-            ("truth", "→ WORLD GRAPH · sự thật khách quan"),
-            ("belief", "→ HỒ SƠ NHÂN VẬT · niềm tin"),
-            ("claim", "→ LỜI KHAI · ghi là điều đã nói, KHÔNG thành niềm tin của người nói"),
-            ("contradiction", "✗ MÂU THUẪN · chặn ghi cả chương"),
-        ]
-        for grp, title in titles:
-            if groups[grp]:
-                print(f"  {title} ({len(groups[grp])})")
-                for v, item in groups[grp]:
-                    print(f"      [{v:11}] {_describe(item)}")
+        for line in _diff_lines(delta, out, eng, args.chapter):
+            print(line)
         if out["retractions"]:
             print(f"  → ĐÓNG QUAN HỆ ({len(out['retractions'])})")
             for k, v in out["retractions"].items():
@@ -497,10 +567,15 @@ def cmd_audit(args) -> int:
         dem: dict[str, int] = {}
         blocker = False
         print(f"Kiểm toán tất định chương {args.chapter} · {len(scenes)} cảnh")
+        truoc: list[dict] = []
         for si, prose in scenes:
             c = audit_contract(eng, args.chapter, si)
-            findings = deterministic_audit(prose, c, args.chapter, eng)
-            st = audit_stats(prose, c)
+            findings = deterministic_audit(prose, c, args.chapter, eng,
+                                           previous_scenes=truoc)
+            st = audit_stats(prose, c, previous_scenes=truoc)
+            truoc.append({"scene_id": c["scene_id"], "prose": prose,
+                          "location": eng.planner.location_id(args.chapter, si),
+                          "cast": [x["id"] for x in c["active_characters"]]})
             report["scenes"].append({"scene_id": c["scene_id"], "stats": st,
                                      "findings": findings})
             r = st["rhythm"] or {}
@@ -525,6 +600,91 @@ def cmd_audit(args) -> int:
         eng.store.close()
 
 
+def cmd_eval(args) -> int:
+    """Chấm bộ chỉ số M1–M15 trên các chương đã ghi (§13).
+
+    Mã thoát: 0 không có báo động · 3 có báo động đỏ.
+    """
+    eng = build_engines(_llm("fake"), db_path=args.db)
+    try:
+        den = args.den or max((int(f.scene_id[2:5]) for f in eng.store.get_frames()),
+                              default=args.tu)
+        so = list(range(args.tu, den + 1))
+        judge = _llm(args.judge) if args.judge else None
+        rep = evaluate(eng, so, judge=judge)
+        print(f"Chỉ số M1–M15 · chương {args.tu}–{den} · "
+              f"judge={args.judge or 'không'}")
+        for name, res in rep["metrics"].items():
+            v = res.get("value")
+            gia_tri = "chưa đo được" if v is None else f"{v}"
+            co = any(a["metric"] == name for a in rep["alerts"])
+            print(f"  {'⚠' if co else ' '} {name:<26} {gia_tri:>14}  "
+                  f"(mục tiêu {res['target']})"
+                  + (f"  — {res.get('reason')}" if v is None else ""))
+        for a in rep["alerts"]:
+            print(f"  ⚠ {a['metric']}: {a['value']} ngoài mục tiêu "
+                  f"{a['target']} — {a['likely_cause']}")
+        if args.baseline:
+            base = json.loads(Path(args.baseline).read_text(encoding="utf-8"))
+            reg = run_regression(rep, base)
+            rep["regression"] = reg
+            print(f"  hồi quy so với {args.baseline}: {reg['verdict']}"
+                  + (f" — tụt: {', '.join(reg['regressed'])}" if reg["regressed"] else ""))
+        OUT_REPORTS.mkdir(parents=True, exist_ok=True)
+        rp = OUT_REPORTS / (args.out or f"eval_ch{args.tu:03d}_{den:03d}.json")
+        rp.write_text(json.dumps(rep, ensure_ascii=False, indent=2, default=str),
+                      encoding="utf-8")
+        print(f"  {rp}")
+        return 3 if rep["alerts"] else 0
+    finally:
+        eng.store.close()
+
+
+def cmd_report_debt(args) -> int:
+    """Nợ tự sự toàn cục (§6.4, §16.1) — thứ đã hứa với độc giả mà chưa trả.
+
+    Mã thoát: 0 trong ngưỡng · 3 vượt ngưỡng, nên trả nợ trước khi mở tuyến mới.
+    """
+    eng = build_engines(_llm("fake"), db_path=args.db)
+    try:
+        den = args.den or max((int(f.scene_id[2:5]) for f in eng.store.get_frames()),
+                              default=0)
+        d = story_debt(eng, last_chapter=den)
+        c = d["clues"]
+        print(f"Nợ tự sự tới chương {den} · debt_load {d['debt_load']}"
+              f"/{d['block_threshold']}"
+              + ("  ⚠ VƯỢT NGƯỠNG" if d["blocked"] else ""))
+        for m in c["overdue"]:
+            print(f"  ⚠ manh mối QUÁ HẠN {m.get('clue', m.get('npc'))} "
+                  f"— trễ {m['overdue_by']} chương")
+        for m in c["late_to_plant"]:
+            print(f"  ⚠ chưa cài kịp {m['clue']} — hạn cài ch{m['plant_by']}, "
+                  f"trễ {m['late_by']} chương")
+        for m in c["at_risk"]:
+            print(f"  · sắp đến hạn {m['clue']} — còn {m['slack']} chương")
+        for m in c["forgotten"]:
+            print(f"  · độc giả đã quên {m['clue']} — salience {m['salience']}, "
+                  f"im {m['silent_for']} chương")
+        for r in d["relationships"]:
+            print(f"  · quan hệ {r['pair']}: {r['reason']}")
+        for n in d["news"]:
+            print(f"  · tin {n['news_id']} {n['reason']}")
+        for p in d["plan_patches"]:
+            print(f"  ⚑ CP-4 {p.get('patch_id')}: chờ tác giả quyết")
+        if d["unresolved_total"]:
+            print(f"  · {d['unresolved_total']} chỉ mục treo; gần nhất:")
+            for u in d["unresolved"][-4:]:
+                print(f"      ch{u['chapter']}: {u['thread'][:90]}")
+        OUT_REPORTS.mkdir(parents=True, exist_ok=True)
+        rp = OUT_REPORTS / "debt.json"
+        rp.write_text(json.dumps(d, ensure_ascii=False, indent=2, default=str),
+                      encoding="utf-8")
+        print(f"  {rp}")
+        return 3 if d["blocked"] else 0
+    finally:
+        eng.store.close()
+
+
 def cmd_show(args) -> int:
     p = OUT_CHAPTERS / f"ch{args.chapter:03d}.md"
     if not p.exists():
@@ -543,10 +703,17 @@ def main(argv=None) -> int:
     w.add_argument("--chapter", type=int, required=True)
     w.add_argument("--llm", default=None,
                    help="fake (mặc định) | gemini")
+    w.add_argument("--writer-model", dest="writer_model", default="",
+                   help="model riêng cho vai Writer, vd gemini-3.8-flash — "
+                        "6/26 lượt mỗi chương, nên chậm hơn nhưng không gấp 13 lần")
     w.add_argument("--db", default=DB_PATH)
     w.add_argument("--force", action="store_true",
                    help="XOÁ bản cũ rồi viết lại chương đã có")
     w.add_argument("--traceback", action="store_true")
+    w.add_argument("--resume", action="store_true",
+                   help="tiếp tục chương đang dở từ checkpoint")
+    w.add_argument("--checkpoint-db", dest="checkpoint_db", default=CHECKPOINT_DB)
+    w.add_argument("--no-checkpoint", dest="no_checkpoint", action="store_true")
     w.set_defaults(func=cmd_write)
 
     s = sub.add_parser("status", help="trạng thái canon store")
@@ -576,6 +743,20 @@ def main(argv=None) -> int:
     au.add_argument("--chapter", type=int, required=True)
     au.add_argument("--db", default=DB_PATH)
     au.set_defaults(func=cmd_audit)
+
+    ev = sub.add_parser("eval", help="chấm bộ chỉ số M1–M15 (§13)")
+    ev.add_argument("--from", dest="tu", type=int, default=1)
+    ev.add_argument("--to", dest="den", type=int)
+    ev.add_argument("--judge", default="", help="fake|gemini — bật M6, M7")
+    ev.add_argument("--baseline", default="", help="file eval JSON để so hồi quy")
+    ev.add_argument("--out", default="")
+    ev.add_argument("--db", default=DB_PATH)
+    ev.set_defaults(func=cmd_eval)
+
+    rd = sub.add_parser("report-debt", help="nợ tự sự toàn cục (§6.4)")
+    rd.add_argument("--to", dest="den", type=int)
+    rd.add_argument("--db", default=DB_PATH)
+    rd.set_defaults(func=cmd_report_debt)
 
     args = ap.parse_args(argv)
     if getattr(args, "llm", None) is None:

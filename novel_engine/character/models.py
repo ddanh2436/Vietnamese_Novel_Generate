@@ -58,6 +58,17 @@ class VoiceFingerprint(BaseModel):
     max_sentence_len: int
     register: Literal["formal", "clipped", "ornate", "vernacular", "clinical"]
     signature_lexicon: list[str]                # 8–15 từ/cụm nhân vật hay dùng
+    # Khẩu ngữ THUẦN: cụm nhân vật lặp vì tính cách, không mang nghĩa chuyên môn.
+    # Tách khỏi `signature_lexicon` vì hai thứ chịu trần khác nhau, mà trước đây
+    # `tics.py` phải đoán bằng số từ: cụm ≥3 từ là khẩu ngữ, ≤2 từ là thuật ngữ.
+    # Phép đoán ấy hỏng đúng ở "được chưa" — hai từ, không nghĩa chuyên môn, và
+    # Vhal nói 22 lần trong một arc mà không luật nào chạm tới.
+    verbal_tics: list[str] = Field(default_factory=list)
+    # 1–3 CÂU MẪU nhân vật có thể nói. Đây là thứ Writer nhận thay cho
+    # `signature_lexicon`: mẫu dạy CÁCH nói, danh sách dạy DÙNG LẠI TỪ NÀO.
+    # NT-7 nói chỉ số văn phong là công cụ chẩn đoán chứ không phải mục tiêu
+    # đưa cho Writer — `signature_lexicon` cũng vậy, và suốt Arc 1 ta vẫn đưa.
+    voice_exemplars: list[str] = Field(default_factory=list)
     forbidden_lexicon: list[str]                # từ nhân vật KHÔNG BAO GIỜ dùng
     syntactic_tic: str                          # vd "hay bỏ lửng câu bằng '—'"
     question_ratio: tuple[float, float]         # tỉ lệ câu hỏi trong thoại
@@ -72,6 +83,28 @@ class VoiceFingerprint(BaseModel):
             raise ValueError(f"mean_sentence_len phải là (min, max) với min < max, nhận {self.mean_sentence_len}")
         if self.max_sentence_len <= hi:
             raise ValueError("max_sentence_len phải lớn hơn cận trên của mean_sentence_len")
+        # Không trường nào ĐI VÀO PROMPT được chứa cụm đang BỊ ĐO.
+        #
+        # Ba lần trong một buổi tôi mắc đúng lỗi này: `signature_lexicon` đi
+        # thẳng vào prompt (Serena dùng cả năm cụm, mỗi cụm ba lần trong MỘT
+        # cảnh); rồi câu mẫu tôi viết thay nó lại chứa "về mặt thủ tục" và "đã
+        # được lưu"; rồi `syntactic_tic` của Vhal trích nguyên văn "được chưa?"
+        # và cụm ấy vẫn xuất hiện 22 lần một arc sau khi đã bỏ danh sách.
+        #
+        # Đây là ràng buộc CỨNG chứ không phải cảnh báo, vì hậu quả của nó
+        # không nhìn thấy được ở chỗ gây ra: bible vẫn nạp, prompt vẫn chạy,
+        # văn vẫn ra — chỉ có điều thước đo và nguyên liệu là một.
+        do = [x.lower() for x in
+              list(self.signature_lexicon) + list(self.verbal_tics)]
+        vao_prompt = " ".join(list(self.voice_exemplars)
+                              + [self.syntactic_tic or ""]).lower()
+        ro = sorted({x for x in do if x and x in vao_prompt})
+        if ro:
+            raise ValueError(
+                "câu mẫu / tật cú pháp đi vào prompt Writer chứa chính cụm mà "
+                f"M3 và ngân sách tật ngôn ngữ đang đếm: {ro}. "
+                "Câu mẫu phải dạy CÁCH nói, không giao lại từ để chép.")
+
         if set(self.signature_lexicon) & set(self.forbidden_lexicon):
             raise ValueError(
                 "một từ vừa nằm trong signature_lexicon vừa trong "

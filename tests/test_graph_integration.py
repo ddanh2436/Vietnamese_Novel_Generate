@@ -27,6 +27,10 @@ CH = 1
 def rig():
     llm = FakeLLM()
     eng = build_engines(llm, db_path=":memory:")
+    # Văn xuôi FakeLLM dựng từ cùng một kho câu nhỏ nên các cảnh CÙNG CHỖ
+    # trùng nhau thật (§4.3). Tắt dò lặp ở fixture tổng hợp; test Ngày 21
+    # kiểm cơ chế đó bằng một LLM lặp có chủ đích.
+    eng.repetition_check = False
     yield llm, eng
     eng.store.close()
 

@@ -122,8 +122,16 @@ def recursion_limit_for(n_scenes: int) -> int:
 
 def run_chapter(engines, chapter: int, *, checkpointer=None,
                 auto_commit: bool = False,
-                thread_id: str | None = None) -> dict:
-    """Chạy một chương. Trả về state cuối."""
+                thread_id: str | None = None,
+                resume: bool = False,
+                on_event=None) -> dict:
+    """Chạy một chương. Trả về state cuối.
+
+    `resume=True` đi tiếp một thread đang dở. Đầu vào khi đó PHẢI là `None`:
+    truyền lại state ban đầu là ra lệnh chạy từ START với state đó, và các kênh
+    cộng dồn (`scene_outputs`, `frames`) giữ nguyên phần cũ rồi cộng thêm một
+    lượt mới — chương ra 8 hay 12 cảnh, không một lỗi nào được ném.
+    """
     graph = build_chapter_graph(checkpointer, auto_commit=auto_commit)
     n_scenes = engines.planner.n_scenes(chapter)
     cfg = {
@@ -131,10 +139,43 @@ def run_chapter(engines, chapter: int, *, checkpointer=None,
                          "thread_id": thread_id or f"ch{chapter:03d}"},
         "recursion_limit": recursion_limit_for(n_scenes),
     }
-    return graph.invoke({
+    vao = None if resume else {
         "chapter": chapter,
         "total_chapters": engines.total_chapters,
         "outline_beat": engines.planner.outline_beat(chapter),
         "scene_outputs": [], "frames": [], "unresolved": [], "time_drift": [],
         "audit_log": [],
-    }, cfg)
+    }
+    if on_event is None:
+        return graph.invoke(vao, cfg)
+    return _chay_co_tien_do(graph, vao, cfg, chapter, n_scenes, on_event)
+
+
+def _chay_co_tien_do(graph, vao, cfg, chapter: int, n_scenes: int,
+                     on_event) -> dict:
+    """Chạy bằng `.stream()` để phát tiến độ từng node, rồi trả state cuối.
+
+    Một chương mất vài phút. Giao diện nào cũng cần biết nó đang ở đâu, và
+    `invoke()` thì im lặng cho tới khi xong. `.stream()` trả về từng cập nhật
+    theo node; ta gộp lại thành state cuối để chữ ký hàm không đổi.
+
+    Sự kiện được giữ NÔNG và JSON hoá được: `scene_index`, tên node, số cảnh đã
+    xong. Đẩy cả state vào sự kiện là mời tầng UI đọc thẳng cấu trúc bên trong
+    và khoá chặt vào nó.
+    """
+    cuoi: dict = {}
+    for buoc in graph.stream(vao, cfg, stream_mode="values"):
+        cuoi = buoc
+        try:
+            on_event({
+                "chapter": chapter,
+                "scene_index": buoc.get("scene_index", 0),
+                "scenes_total": n_scenes,
+                "scenes_done": len(buoc.get("scene_outputs") or []),
+                "revision_count": buoc.get("revision_count", 0),
+                "escalated": bool(buoc.get("escalation_reason")),
+            })
+        except Exception:       # noqa: BLE001
+            # Lỗi trong callback của tầng UI KHÔNG được giết chương đang viết.
+            pass
+    return cuoi

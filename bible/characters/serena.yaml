@@ -74,30 +74,44 @@ private_knowledge:
     is_actually_true: true
 
 voice:
-  register: formal
-  mean_sentence_len: [17, 31]
-  max_sentence_len: 52
+  # Đổi từ `formal` sang `clinical` sau lượt đọc Arc 1: giọng cũ là quan liêu
+  # vòng vo ("tôi e rằng", "anh hiểu cho"), và ba cảnh liền model đọc như đọc
+  # script vì mọi câu đều là một mệnh đề nhượng bộ rồi đảo ngược. Serena sắc
+  # lạnh thì cùng một quyền lực ấy được thi hành bằng câu ngắn và câu hỏi cụt.
+  #
+  # Ba con số dưới phải đổi CÙNG LÚC với register. Để nguyên [17,31] trong khi
+  # bảo model viết câu ngắn thì `voice_report` sẽ báo lỗi ở mọi cảnh của cô —
+  # luật đúng, ngưỡng thuộc về một nhân vật không còn tồn tại.
+  register: clinical
+  mean_sentence_len: [9, 17]
+  max_sentence_len: 30
+  # Thước đo (M3 và ngân sách tật ngôn ngữ), KHÔNG đi vào prompt. Phải mô tả
+  # đúng con người mới, nếu không ta lại đo một nhân vật đã bị thay.
   signature_lexicon:
-    - "theo thẩm quyền"
-    - "tôi e rằng"
-    - "hồ sơ cho thấy"
-    - "về mặt thủ tục"
-    - "anh hiểu cho"
-    - "đã được lưu"
-    - "trong phạm vi tôi biết"
+    - "theo điều lệ"
+    - "không thuộc phần tôi"
+    - "tôi đã nhắc rồi"
+    - "biên bản"
+    - "cấp trên của anh"
     - "điều đó không cần thiết"
+    - "anh tự quyết"
+    - "hết giờ của tôi"
+  voice_exemplars:
+    - "Quy chế bốn mươi hai, khoản ba. Anh đọc chưa?"
+    - "Tôi không ngăn anh. Tôi chỉ ghi lại rằng anh đã được nhắc."
+    - "Ở đây không ai cần anh hiểu. Người ta cần anh ký."
   forbidden_lexicon:
     - "đéo"
     - "kệ"
     - "chắc vậy"
     - "tôi thề"
     - "thôi bỏ đi"
-  syntactic_tic: "mở đầu bằng một mệnh đề nhượng bộ rồi đảo ngược nó bằng 'tuy nhiên'"
-  question_ratio: [0.18, 0.34]
+  syntactic_tic: "trích số hiệu quy chế rồi hất trách nhiệm về phía người nghe"
+  question_ratio: [0.20, 0.38]
   self_reference_rate: 0.12
   under_stress_shift: >
-    câu DÀI hơn chứ không ngắn lại, thêm mệnh đề phụ và cách nói bị động —
-    càng gần chỗ hiểm càng nghe như đang đọc văn bản hành chính
+    câu DÀI hẳn ra và chuyển sang cách nói bị động — bình thường cô cắt cụt,
+    nhưng càng gần chỗ hiểm càng trốn vào sau một đoạn văn bản hành chính
 
 somatic_signature:
   - "xoay chiếc nhẫn dấu quanh ngón, đúng ba vòng rồi dừng"

@@ -101,7 +101,8 @@ def test_cli_giu_van_xuoi_khi_escalate(tmp_path, monkeypatch):
     import cli
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("NOVEL_LLM", "fake")
-    monkeypatch.setattr(cli, "run_chapter", lambda eng, ch: {
+    # `**kw`: từ Ngày 18 CLI truyền thêm checkpointer/thread_id/resume.
+    monkeypatch.setattr(cli, "run_chapter", lambda eng, ch, **kw: {
         "escalated": True, "escalation_reason": "extractor_node lỗi: giả lập",
         "scene_outputs": [{"scene_id": "CH001_S00",
                            "prose": "Văn xuôi đắt tiền không được mất."}]})

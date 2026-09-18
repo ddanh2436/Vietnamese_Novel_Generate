@@ -241,6 +241,21 @@ class SqliteStore:
             (chapter, chapter, scene_idx, k)).fetchall()
         return [r["digest"] for r in reversed(rows)]
 
+    def scene_digests_with_time(self) -> list[dict]:
+        """Mọi digest kèm `epoch_tick`, cho tầng nhớ-lại-theo-nội-dung (L5).
+
+        Nối với `continuity_frames` chứ không lưu thêm cột: mốc epoch của một
+        cảnh đã có một chủ sở hữu duy nhất ở đó (NT-12). Cảnh chưa có frame thì
+        không có mốc, và không mốc thì không lọc được theo NT-6 — bỏ, chứ không
+        đoán bằng số chương.
+        """
+        rows = self.conn.execute(
+            "SELECT d.chapter, d.scene_idx, d.scene_id, d.digest, f.epoch_tick "
+            "FROM scene_digests d JOIN continuity_frames f "
+            "ON f.scene_id = d.scene_id "
+            "ORDER BY d.chapter, d.scene_idx").fetchall()
+        return [dict(r) for r in rows]
+
     def put_chapter_summary(self, chapter: int, summary: str,
                             measured_tension: float = 0.5) -> None:
         self.conn.execute(

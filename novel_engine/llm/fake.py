@@ -22,20 +22,42 @@ import random
 import re
 from typing import Any
 
-# Kho câu để ghép văn xuôi giả. Chọn theo hash của prompt nên CÙNG prompt luôn
-# cho CÙNG kết quả — bộ hồi quy §13.2 cần tính tất định này.
-_FRAGMENTS = [
-    "Cần trục kêu ba tiếng rồi im",
-    "Mùi lưu huỳnh bám vào cổ áo",
-    "Nền rung một nhịp dưới gót chân",
-    "Ánh đèn pha quét ngang mặt nước",
-    "Giấy tờ trong tay ai đó sột soạt",
-    "Một tiếng động khô phía sau bức tường",
-    "Không khí khô rát ở đầu lưỡi",
-    "Tiếng vọng dội lại ba lần rồi tắt",
-    "Hơi nước đọng thành giọt trên mép ống",
-    "Bụi quặng đỏ lắng xuống vai áo",
-]
+# Kho VẬT LIỆU để ghép văn xuôi giả, tách theo KHE. Ghép theo khe cho ra hàng
+# nghìn câu khác nhau, nên hai cảnh khác nhau không dùng chung khối ba từ —
+# `repetition.py` sẽ gắn cờ đúng nếu văn xuôi giả cũng lặp như văn xuôi thật.
+# Mỗi kênh giác quan có kho riêng và được lấy luân phiên, để mọi cảnh đều đủ
+# năm kênh (§10.3 `sensory`). Chọn bằng `random.Random(hash prompt)` nên CÙNG
+# prompt luôn cho CÙNG kết quả — bộ hồi quy §13.2 cần tính tất định đó.
+_THI = ["ánh đèn pha quét ngang mặt nước", "vệt sáng vàng bệch trên vách thép",
+        "bóng cần trục đổ chéo xuống sân ga", "màn sương xám bám trên kính chắn",
+        "ánh chớp từ mối hàn ở khoang dưới", "quầng đèn đỏ trên cửa áp lực"]
+_THINH = ["tiếng còi tàu kéo dài ngoài bến", "tiếng rít của van xả",
+          "tiếng bước chân trên lưới thép", "tiếng bơm nước chạy dưới sàn",
+          "tiếng kim loại giãn vì nhiệt", "tiếng giấy sột soạt trong khay"]
+_KHUU = ["mùi lưu huỳnh bám cổ áo", "mùi dầu khoáng đun quá lửa",
+         "mùi ozone sau cơn phóng điện", "mùi gỉ sắt ẩm",
+         "mùi than ướt từ băng chuyền", "mùi sơn chống cháy còn mới"]
+_XUC = ["hơi lạnh buốt luồn qua khe cửa", "mặt sàn rung một nhịp ngắn",
+        "gió rát tạt vào gáy", "lớp dầu trơn dưới đế giày",
+        "thành ống nóng lên dưới lòng tay", "bụi quặng ram ráp trên da"]
+_VI = ["vị mặn đọng trên môi", "vị kim loại ở đầu lưỡi",
+       "vị chua của nước lọc tuần hoàn", "vị khói nhạt vương trong miệng",
+       "vị thuốc sát trùng sau hớp nước", "vị bụi khô trong hơi thở"]
+_KENH = [_THI, _THINH, _KHUU, _XUC, _VI]
+
+_HANH_DONG = ["dừng lại ở mép khoang", "trôi chậm qua hành lang",
+              "đọng giữa hai vách ngăn", "tắt hẳn sau một nhịp",
+              "vấp vào khung cửa rồi tan", "lan tới tận chân cầu thang"]
+# "trong đầu" khớp mẫu dò rò rỉ nội tâm của `pov_leak_scan` — văn xuôi giả cũng
+# phải hợp lệ với POV Firewall, không chỉ với luật nhịp.
+_PHAN_UNG = ["ghi lại con số vào sổ tay", "đặt tay lên mép bàn kim loại",
+             "đổi chân trụ sang bên trái", "nhìn thẳng vào bảng điều khiển",
+             "đợi thêm một nhịp nữa", "gập tờ giấy làm đôi"]
+_KET = ["rồi thôi không nghĩ tiếp", "vì chưa đến lúc hỏi",
+        "trước khi ai kịp lên tiếng", "như thể chuyện đó đã cũ",
+        "và để mọi thứ ở nguyên chỗ", "dù biết mình sẽ phải quay lại"]
+_NGAN = ["Không ai nói gì", "Đèn chớp một nhịp", "Sàn rung", "Cửa khép lại",
+         "Một giây trôi qua", "Gió ngừng", "Kim đồng hồ nhích"]
 
 _DIALOGUE = [
     "— Anh xếp hàng bên kia.",
@@ -108,20 +130,20 @@ class FakeLLM:
         words = 0
         i = 0
         while words < self.word_target:
-            frag = rng.choice(_FRAGMENTS)
             if i % 4 == 3:
                 # Câu ngắn xen vào — σ độ dài câu phải khác 0, nếu không
                 # `rhythm.py` gắn cờ đúng ở lần chạy đầu tiên.
-                sent = f"{frag}."
+                sent = rng.choice(_NGAN) + "."
             elif i % 5 == 2:
                 out.append(rng.choice(_DIALOGUE))
                 words += 6
                 i += 1
                 continue
             else:
-                sent = (f"{frag}, và {pov} ghi nhận điều đó mà không để lộ ra "
-                        f"ngoài nét mặt, bởi vì việc để lộ ra sẽ khiến người "
-                        f"đối diện biết mình vừa chú ý tới cái gì.")
+                # Luân phiên kênh giác quan: mọi cảnh đều đủ năm kênh.
+                giac_quan = rng.choice(_KENH[i % len(_KENH)])
+                sent = (f"{giac_quan.capitalize()} {rng.choice(_HANH_DONG)}, "
+                        f"{pov} {rng.choice(_PHAN_UNG)} {rng.choice(_KET)}.")
             out.append(sent)
             words += len(sent.split())
             i += 1

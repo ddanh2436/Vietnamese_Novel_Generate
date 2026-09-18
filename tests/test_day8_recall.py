@@ -77,7 +77,9 @@ def test_trich_xuat_rong_duoc_ghi_vao_delta_va_bao_cao():
         d = StateDelta.model_validate(st["delta"])
         reasons = {(x["stage"], x["reason"]) for x in d.extraction_issues}
         assert ("recall", "empty_extraction") in reasons
-        assert ("parse", "invalid_item") in reasons
+        # Từ lượt Arc 1: giá trị đơn ở chỗ cần danh sách được ÉP KIỂU, không bị
+        # loại — nên mục hỏng của bản giả này hiện ra dưới nhãn `coerced`.
+        assert any(st == "parse" for st, _ in reasons)
         rep = st["extraction_report"]
         assert rep["raw"]["luot_2"] == "{}"
         assert "CH001_S00" in rep["raw"]["luot_1"]

@@ -14,6 +14,9 @@ Self-plagiarism (§4.3) cần vector store nên chưa có ở đây.
 from __future__ import annotations
 
 from novel_engine.audit.prose import prose_audit, sensory_channels
+from novel_engine.audit.repetition import containment, repetition_findings
+from novel_engine.audit.text_hygiene import dialogue_style, hygiene_findings
+from novel_engine.audit.tics import tic_findings
 from novel_engine.audit.rhythm import rhythm_audit, rhythm_stats
 from novel_engine.character.firewall import pov_leak_scan
 from novel_engine.character.voice_check import attribute_dialogue, voice_report
@@ -33,10 +36,23 @@ def _speaker_names(contract: dict) -> dict[str, str]:
             if x.get("name") and x.get("id")}
 
 
-def deterministic_audit(prose: str, contract: dict, chapter: int, eng) -> list[dict]:
+def deterministic_audit(prose: str, contract: dict, chapter: int, eng,
+                       previous_scenes=()) -> list[dict]:
+    """`previous_scenes`: các cảnh ĐÃ chốt của chương này — `[{scene_id, prose}]`.
+    Không có chúng thì không luật nào thấy được một cảnh dựng lại cảnh trước."""
     out: list[dict] = []
     out += prose_audit(prose, contract)
     out += rhythm_audit(prose, contract, lang="vi")
+    out += tic_findings(prose, contract, getattr(eng, "chars", {}) if eng else {},
+                        previous_scenes=previous_scenes)
+    out += hygiene_findings(prose)
+    # Cờ tắt cho fixture TỔNG HỢP: FakeLLM dựng mọi cảnh từ cùng một kho câu nhỏ
+    # nên nó lặp thật (trùng 0.55, ngưỡng 0.085) — đúng, nhưng vô nghĩa để kiểm.
+    if getattr(eng, "repetition_check", True):
+        out += repetition_findings(
+            prose, list(previous_scenes or []),
+            location=contract.get("location_id") or contract.get("location"),
+            cast=[x.get("id") for x in contract.get("active_characters", [])])
     for h in pov_leak_scan(prose, _pov_name(contract, eng)):
         out.append({**h, "message": "có thể rò rỉ POV: …"
                     + " ".join(h["span"].split()) + "…"})
@@ -52,12 +68,16 @@ def deterministic_audit(prose: str, contract: dict, chapter: int, eng) -> list[d
     return out
 
 
-def audit_stats(prose: str, contract: dict) -> dict:
+def audit_stats(prose: str, contract: dict, previous_scenes=()) -> dict:
     """Số đo để HIỆU CHỈNH ngưỡng (§10.3.3), không phải để chấm điểm."""
     attr = attribute_dialogue(prose, _speaker_names(contract))
+    truoc = list(previous_scenes or [])
     return {
         "words": len(prose.split()),
         "rhythm": rhythm_stats(prose),
+        "dialogue_style": dialogue_style(prose),
+        "max_repetition": round(max((containment(prose, p.get("prose", ""))
+                                     for p in truoc), default=0.0), 3),
         "sensory": sensory_channels(prose),
         "dialogue_attributed": {cid: len(v) + len(attr["inferred"][cid])
                                 for cid, v in attr["by_speaker"].items()},

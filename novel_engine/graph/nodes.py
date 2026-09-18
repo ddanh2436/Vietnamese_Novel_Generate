@@ -13,6 +13,11 @@ from novel_engine.audit.critique import (
     parse_llm_findings, polish_notes, routing_severity, writer_feedback,
 )
 from novel_engine.audit.deterministic import deterministic_audit
+from novel_engine.audit.text_hygiene import sanitize_prose
+from novel_engine.audit.tics import (COUNTING_PER_CHAPTER, FIGURE_PER_CHAPTER,
+                                     SOMATIC_PER_CHAPTER, _FIGURE,
+                                     _count_gesture, _nfc_lower,
+                                     counting_speech)
 from novel_engine.audit.prose import CLICHE_PHRASES
 from novel_engine.canon.models import StateDelta
 from novel_engine.canon.timeline import ContinuityFrame, SceneClose, StoryTime
@@ -22,6 +27,9 @@ from novel_engine.graph.state import ChapterState
 from novel_engine.llm.json_io import merge_json, parse_model
 from novel_engine.memory.assembler import render_facts
 from novel_engine.foreshadow.debt import narrative_debt_report
+from novel_engine.eval.tension_measure import (
+    chapter_summary, measure_tension,
+)
 from novel_engine.foreshadow.scheduler import ForeshadowScheduler, SceneSlot
 from novel_engine.planner.beats import QUIET_BEATS, build_beats
 from novel_engine.planner.contract import CharacterInScene, SceneContract
@@ -110,8 +118,11 @@ def director_node(state: ChapterState, config: RunnableConfig) -> dict:
                              if prof.private_knowledge else None),
                 hidden_action=eng.planner.hidden_action(cid, ch, si),
                 deliberation={},                      # deliberate() — GĐ2
+                # `signature_lexicon` KHÔNG còn đi vào prompt: nó là thước
+                # đo (M3, ngân sách tật ngôn ngữ), và suốt Arc 1 ta vừa đo vừa
+                # đưa thước cho người bị đo. Xem `_characters_brief`.
                 voice_reminder=prof.voice.model_dump(
-                    include={"register", "signature_lexicon",
+                    include={"register", "voice_exemplars",
                              "forbidden_lexicon", "syntactic_tic",
                              "under_stress_shift"}),
                 somatic_allowed=prof.somatic_signature,
@@ -152,7 +163,18 @@ def director_node(state: ChapterState, config: RunnableConfig) -> dict:
             "outline": state.get("outline_beat", ""),
             "debt": _debt_brief(debt),
         }), role="director")
-        contracts.append(merge_json(raw, filled))
+        contract = merge_json(raw, filled)
+        # Cảnh N bắt đầu ở nơi cảnh N−1 kết thúc. Không nối lại thì Director để
+        # LLM tự nghĩ `entry_state` cho từng cảnh, và Arc 1 cho ra ba dị bản của
+        # cùng một cuộc đối thoại trong một chương: không cảnh nào biết cảnh
+        # trước đã ngã ngũ ra sao (State Tracker).
+        if contracts and contracts[-1].get("exit_state"):
+            truoc = contracts[-1]
+            contract["entry_state"] = truoc["exit_state"]
+            contract["scene_must_change"] = (
+                contract.get("scene_must_change")
+                or f"khác với trạng thái cuối cảnh trước: {truoc['exit_state']}")
+        contracts.append(contract)
 
     return {"contracts": contracts, "beats": beats,
             "scene_index": 0, "revision_count": 0,
@@ -172,13 +194,15 @@ def writer_node(state: ChapterState, config: RunnableConfig) -> dict:
         chapter=state["chapter"], scene_idx=state["scene_index"],
         pov_id=c["pov_character"],
         present=[x["id"] for x in c["active_characters"]],
-        location_id=c["location_id"] or c["location"], epoch_tick=epoch_tick)
+        location_id=c["location_id"] or c["location"], epoch_tick=epoch_tick,
+        query=_truy_van_nho_lai(c))
 
     # §5.4.1 — HAI bộ lọc, không phải một. Gộp chúng là C4: lớp 3 duyệt danh
     # sách rỗng và thành mã chết, còn contract đi thẳng vào prompt không qua
     # bộ lọc nào.
     ctx = eng.firewall.filter_memory(ctx, c["pov_character"], epoch_tick)
     c_safe = eng.firewall.filter_scene_contract(c, c["pov_character"])
+    c_safe = _tru_cu_chi_da_can(c_safe, _scenes_truoc(state), eng.chars)
 
     # Chỉ số nhịp không quay lại Writer (§10.3.2), và lời giải thích của
     # Auditor LLM không vào prompt Writer — nó đọc bí mật NPC (xem critique.py).
@@ -205,9 +229,12 @@ def writer_node(state: ChapterState, config: RunnableConfig) -> dict:
         "word_min": c["word_budget"][0], "word_max": c["word_budget"][1],
         "max_explicit_goal_statements": c["max_explicit_goal_statements"],
         "sensory_channels_required": c["sensory_channels_required"],
+        "ngan_sach": _ngan_sach_da_dung(_scenes_truoc(state)),
+        "next_chapter": _chuong_sau_brief(state, eng, c),
         "subtext_requirement": c["subtext_requirement"],
         "forbidden_cliches": ", ".join(c["forbidden_cliches"]),
         "recent_scenes": _bullets(ctx["recent_scenes"]) or "(chưa có)",
+        "callbacks": _bullets(ctx.get("callbacks") or []) or "(không có)",
         "recent_chapters": _bullets(ctx["recent_chapters"]) or "(chưa có)",
         "arc_history": _bullets(ctx["arc_history"]) or "(chưa có)",
         "known_facts": _bullets(render_facts(ctx["known_facts"])) or "(chưa có)",
@@ -216,13 +243,152 @@ def writer_node(state: ChapterState, config: RunnableConfig) -> dict:
         "feedback": feedback,
     }), role="writer")
 
+    # Ký tự rác là lỗi ĐÁNH MÁY của model (Arc 1: chữ Cyrillic và Kannada lọt
+    # vào giữa từ tiếng Việt), không phải lỗi sáng tác. Dọn bằng code; bắt viết
+    # lại 900 từ vì ba ký tự là đốt tiền.
+    prose, don_dep = sanitize_prose(prose)
+
     # F3: §9.4 có ghi chú về việc này nhưng thân hàm ở §9.2 thì không làm — và
     # thiếu nó thì `after_audit` không bao giờ chạm MAX_REVISIONS, vòng
     # writer↔auditor chạy vô tận. Đúng đắn được nhờ `scene_boundary_node`
     # reset `findings` về [] ở mỗi ranh giới cảnh (C6).
     return {"current_draft": prose,
+            "hygiene_notes": ([{"scene_id": c["scene_id"], "notes": don_dep}]
+                              if don_dep else []),
             "revision_count": state.get("revision_count", 0)
                               + (1 if state.get("findings") else 0)}
+
+
+def _tru_cu_chi_da_can(contract: dict, truoc: list[dict], chars: dict) -> dict:
+    """Cử chỉ đã hết ngân sách trong chương này thì CẤM ở cảnh tiếp theo.
+
+    Ngân sách cử chỉ ở `tics.py` chỉ BÁO sau khi viết, và nó là lỗi `minor` nên
+    chỉ đi polish — mà polish không đổi ngôn ngữ cơ thể. Đo trên Arc 1 viết
+    lại: 19 lần trên 5 chương, trần là 3 mỗi chương. Luật đúng, nhưng nói vào
+    chỗ không ai sửa được.
+
+    Chỗ sửa được là TRƯỚC khi viết: Writer chỉ cần biết cử chỉ nào đã dùng cạn.
+    Code quyết ngân sách, prompt phát biểu — LLM diễn đạt chứ không quyết định.
+    """
+    if not truoc:
+        return contract
+    van = _nfc_lower(" ".join(x.get("prose", "") for x in truoc))
+    ra = dict(contract)
+    ds = []
+    for x in contract.get("active_characters", []):
+        y = dict(x)
+        prof = chars.get(x.get("id")) if chars else None
+        if prof is not None and y.get("somatic_allowed"):
+            can = [g for g in y["somatic_allowed"]
+                   if _count_gesture(van, g) >= SOMATIC_PER_CHAPTER]
+            if can:
+                y["somatic_allowed"] = [g for g in y["somatic_allowed"] if g not in can]
+                # Đứng ĐẦU danh sách: `_characters_brief` chỉ in 5 mục cấm
+                # đầu tiên, mà riêng sáo ngữ dùng chung đã có 10 — nối vào
+                # đuôi thì lệnh cấm này không bao giờ tới được prompt.
+                y["somatic_forbidden"] = [
+                    f"{g} (đã dùng đủ số lần cho chương này)" for g in can
+                ] + list(y.get("somatic_forbidden", []))
+        ds.append(y)
+    ra["active_characters"] = ds
+    return ra
+
+
+def _truy_van_nho_lai(contract: dict) -> str:
+    """Câu truy vấn cho L5, ghép từ những gì cảnh này ĐANG nói tới.
+
+    Địa điểm và người có mặt là hai tín hiệu mạnh nhất cho một callback thật:
+    người đọc nhớ lại một chỗ và một người, không nhớ lại một chủ đề.
+    """
+    phan = [contract.get("location_id") or contract.get("location") or "",
+            contract.get("dramatic_question") or "",
+            contract.get("scene_must_change") or ""]
+    phan += [x.get("name") or x.get("id") or ""
+             for x in contract.get("active_characters", [])]
+    phan += [d.get("surface_form") or "" for d in contract.get("plant_directives", [])]
+    return " ".join(x for x in phan if x)
+
+
+def _ngan_sach_da_dung(truoc: list[dict]) -> str:
+    """Ngân sách chương đã tiêu tới đâu — nói TRƯỚC khi viết, không phải sau.
+
+    `counting_tic` và `figure_overuse` là lỗi `minor` nên chúng đi polish. Đo
+    trên lượt viết lại Arc 1: cả hai NỔ ĐÚNG (ch1, ch3, ch4) mà số lượt thoại
+    chỉ gồm một con số vẫn y nguyên 8. Polish không sửa được, vì bỏ "— Ba." đi
+    thì phải VIẾT một câu thoại thay vào, mà bịa nội dung không phải việc của
+    polish.
+
+    Đây là cùng một sai lầm với ngân sách cử chỉ, và cùng một cách chữa: chuyển
+    thông tin lên phía TRƯỚC. Code đếm, prompt phát biểu, Writer tự tránh.
+    """
+    if not truoc:
+        return ""
+    van = chr(10).join(x.get("prose", "") for x in truoc)
+    dong = []
+    n = len(counting_speech(van))
+    if n >= COUNTING_PER_CHAPTER:
+        dong.append(f"- Nhân vật đã đếm thành tiếng {n} lần trong chương này. "
+                    f"KHÔNG dùng thêm lượt thoại chỉ gồm một con số; nếu cần "
+                    f"một con số thì nó phải dẫn vào một quan sát cụ thể.")
+    dem: dict[str, int] = {}
+    for m in _FIGURE.finditer(_nfc_lower(van)):
+        dem[m.group(0)] = dem.get(m.group(0), 0) + 1
+    het = sorted(k for k, v in dem.items() if v >= FIGURE_PER_CHAPTER)
+    if het:
+        dong.append("- Các con số sau đã dùng hết lượt trong chương này, "
+                    "KHÔNG nhắc lại: " + ", ".join(f"“{x}”" for x in het) + ".")
+    if not dong:
+        return ""
+    return ("## NGÂN SÁCH CHƯƠNG ĐÃ TIÊU\n"
+            + ("\n").join(dong) + "\n\n")
+
+
+def _chuong_sau_brief(state: ChapterState, eng, contract: dict) -> str:
+    """Cảnh CUỐI chương được biết chương sau mở ra ở đâu — chỉ cảnh cuối.
+
+    Ý mượn từ AI_NovelGenerator: prompt viết chương của họ nhận cả blueprint
+    chương hiện tại LẪN chương kế, nên chương không kết thúc vào khoảng không.
+    Ta không có gì tương đương: Writer chỉ thấy `exit_state` của chính cảnh
+    mình, nên cảnh cuối chương thường đóng lại gọn ghẽ rồi chương sau phải
+    khởi động lại từ đầu.
+
+    Hai chỗ thắt chặt hơn bản gốc của họ:
+
+    - CHỈ cảnh cuối nhận. Đưa cho mọi cảnh là mời model kể trước.
+    - Nói thẳng đây là thông tin cho NGƯỜI VIẾT, không phải điều POV biết —
+      cùng một hàng rào mà `director_only._hard_constraint` dựng cho
+      `hidden_action`. Thiếu câu đó thì POV sẽ "linh cảm" về chương sau, và
+      đó đúng là rò rỉ tri thức mà §5.4 sinh ra để chặn.
+    """
+    tong = len(state.get("contracts") or [])
+    if tong and state.get("scene_index") != tong - 1:
+        return ""
+    sau = state["chapter"] + 1
+    try:
+        beat = eng.planner.outline_beat(sau)
+        ten = eng.planner.title(sau)
+    except (KeyError, IndexError):
+        return ""
+    if not beat:
+        return ""
+    return (f"## CHƯƠNG SAU MỞ RA Ở ĐÂU (cho NGƯỜI VIẾT, KHÔNG phải điều "
+            f"POV biết)\n"
+            f"Chương {sau} — {ten}: {beat}\n"
+            f"Kết cảnh này sao cho chương sau bắt vào được, nhưng POV KHÔNG "
+            f"được linh cảm, dự đoán hay nhắc tới bất cứ điều gì ở trên."
+            f"\n\n")
+
+
+def _scenes_truoc(state: ChapterState) -> list[dict]:
+    """Cảnh đã chốt, kèm HIỆN TRƯỜNG — dò lặp chỉ so cảnh cùng chỗ, cùng người."""
+    ct = {c["scene_id"]: c for c in state.get("contracts", [])}
+    out = []
+    for s in state.get("scene_outputs", []):
+        c = ct.get(s["scene_id"], {})
+        out.append({**s,
+                    "location": c.get("location_id") or c.get("location"),
+                    "cast": [x.get("id") for x in c.get("active_characters", [])]})
+    return out
 
 
 @safe_node
@@ -242,7 +408,8 @@ def auditor_node(state: ChapterState, config: RunnableConfig) -> dict:
     prose = state["current_draft"]
 
     findings = [{**f, "source": "code"}
-                for f in deterministic_audit(prose, c, state["chapter"], eng)]
+                for f in deterministic_audit(prose, c, state["chapter"], eng,
+                                             previous_scenes=_scenes_truoc(state))]
     issues: list[dict] = []
     llm_called = False
     if getattr(eng, "llm_audit", True) and not any(
@@ -328,10 +495,12 @@ def polish_node(state: ChapterState, config: RunnableConfig) -> dict:
             **report, "accepted": False, "called": True,
             "reason": f"lỗi LLM: {type(e).__name__}: {e}"[:200]}}
 
-    out = clean_polish_output(raw)
+    out, _ = sanitize_prose(clean_polish_output(raw))
     why = content_drifted(draft, out, _drift_names(eng, c))
     if why is None:
-        worse = new_serious(findings, deterministic_audit(out, c, state["chapter"], eng))
+        worse = new_serious(findings, deterministic_audit(
+            out, c, state["chapter"], eng,
+            previous_scenes=_scenes_truoc(state)))
         if worse:
             why = "bản polish sinh lỗi mới: " + ", ".join(worse)
     if why:
@@ -647,9 +816,10 @@ def _characters_brief(chars: list[dict]) -> str:
                 lines.append("- cảnh này nhân vật ở MỘT MÌNH, không có ai để nói "
                              "chuyện: giọng lộ qua chi tiết được chọn và nhịp câu, "
                              "không qua khẩu ngữ hay cụm từ quen miệng")
-            else:
-                lines.append(f"- từ hay dùng (chỉ trong THOẠI): "
-                             f"{', '.join(v.get('signature_lexicon', [])[:6])}")
+            elif v.get("voice_exemplars"):
+                lines.append("- người này nói kiểu như thế này (MẪU để bắt "
+                             "chước CÁCH nói, không phải câu để chép lại):")
+                lines += [f"    · “{x}”" for x in v["voice_exemplars"][:3]]
             lines.append(f"- từ CẤM: {', '.join(v.get('forbidden_lexicon', [])[:6])}")
             if v.get("under_stress_shift"):
                 lines.append(f"- dưới áp lực: {v['under_stress_shift'].strip()}")
@@ -747,7 +917,8 @@ def extractor_node(state: ChapterState, config: RunnableConfig) -> dict:
     # epoch, và mệnh đề của cảnh hồi ức thoát khỏi kiểm tra hồi ức.
     from novel_engine.reconcile.verify import assign_scenes
     scene_notes = assign_scenes(delta, scenes)
-    coverage = plan_coverage(contracts, delta, known_clues=set(eng.graph.clues))
+    coverage = plan_coverage(contracts, delta,
+                             known_clues=set(eng.graph.clues), scenes=scenes)
 
     issues = ([{"stage": "parse", **i} for i in dropped]
               + [{"stage": "verify", **r} for r in rejected]
@@ -766,9 +937,16 @@ def extractor_node(state: ChapterState, config: RunnableConfig) -> dict:
                                    f"phản hồi thô trong báo cáo chương")})
     delta.extraction_issues = issues
 
+    # Đóng hai vòng bị hở: `measured_tension` chưa từng được GHI nên
+    # `director_node` luôn đọc 0.5 mặc định (§8.1), và `chapter_summaries` rỗng
+    # nên tầng L2 của bộ nhớ (§4.1 — "các chương gần đây") không bao giờ có gì.
+    do_cang = measure_tension(scenes, delta, state.get("unresolved", []))
+    eng.store.put_chapter_summary(state["chapter"], chapter_summary(scenes), do_cang)
+
     return {
         "delta": delta.model_dump(),
         "extraction_report": {
+            "measured_tension": do_cang,
             "rejected_spans": rejected,
             "dropped_items": dropped,
             "assertions_kept": len(delta.assertions),

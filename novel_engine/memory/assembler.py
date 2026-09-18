@@ -4,6 +4,7 @@ from __future__ import annotations
 import functools
 
 from novel_engine.memory.hierarchy import MemoryBudget
+from novel_engine.memory.recall import callbacks
 
 
 @functools.lru_cache(maxsize=1)
@@ -65,13 +66,53 @@ def truncate_to(items: list[str] | list[tuple[float, str]], budget: int,
 
 
 class ContextAssembler:
-    def __init__(self, graph, store, budget: MemoryBudget | None = None):
+    def __init__(self, graph, store, budget: MemoryBudget | None = None,
+                 planner=None):
         self.g = graph
         self.store = store
         self.b = budget or MemoryBudget.for_vietnamese()
+        # Chỉ dùng để biết POV của các cảnh CŨ (L5). Không có planner thì tầng
+        # L5 im lặng chứ không đoán — đoán POV nghĩa là đoán ai được nhớ gì.
+        self.planner = planner
+
+    def _callbacks(self, chapter: int, scene_idx: int, pov_id: str,
+                   epoch_tick: int, query: str) -> list[dict]:
+        """L5: cảnh CŨ liên quan theo nội dung, không theo thứ tự.
+
+        Ba lớp lọc, và cả ba đều cần thiết:
+
+        1. CÙNG POV. Đây là chỗ khác hẳn một vector store thông thường. Truy hồi
+           tự do sẽ đưa cho Writer một digest cảnh POV Vhal ("Vhal sửa sổ trực")
+           trong lúc đang viết cảnh POV Kaelen — rò rỉ đúng thứ §5.4 dựng ba lớp
+           để chặn. Nhân vật chỉ nhớ lại cảnh của CHÍNH MÌNH; điều người khác
+           nói cho họ biết đã có L4 (`known_facts`) lo, qua `known_by`.
+        2. `epoch_tick` KHÔNG VƯỢT hiện tại (NT-6). Lọc theo chương thì cảnh hồi
+           ức ở Chương 2 (tick 2480) sẽ "nhớ" được Chương 5 (tick 20600).
+        3. BỎ cửa sổ L1. Hai cảnh liền trước đã nằm nguyên văn ở L1; nhắc lại
+           chỉ tốn token và mời model dựng lại đúng cảnh vừa viết.
+        """
+        if self.planner is None:
+            return []
+        gan = {(chapter, scene_idx - 1), (chapter, scene_idx - 2)}
+        ung_vien = []
+        for d in self.store.scene_digests_with_time():
+            if (d["chapter"], d["scene_idx"]) >= (chapter, scene_idx):
+                continue
+            if (d["chapter"], d["scene_idx"]) in gan:
+                continue
+            if d["epoch_tick"] > epoch_tick:
+                continue
+            try:
+                if self.planner.pov_for(d["chapter"], d["scene_idx"]) != pov_id:
+                    continue
+            except (KeyError, IndexError):
+                continue
+            ung_vien.append(d)
+        return callbacks(query, ung_vien, k=2)
 
     def build(self, chapter: int, scene_idx: int, pov_id: str,
-              present: list[str], location_id: str, epoch_tick: int) -> dict:
+              present: list[str], location_id: str, epoch_tick: int,
+              query: str = "") -> dict:
         # --- L1: 2 cảnh liền trước, nguyên văn digest ---
         l1 = self.store.recent_scene_digests(chapter, scene_idx, k=2)
 
@@ -109,6 +150,10 @@ class ContextAssembler:
             "recent_chapters": truncate_to(l2, self.b.l2_recent_chapters, True),
             "arc_history": truncate_to(l3, self.b.l3_arcs, True),
             "known_facts": [f for f in facts if f["text"] in kept],
+            "callbacks": truncate_to(
+                [x["digest"] for x in self._callbacks(
+                    chapter, scene_idx, pov_id, epoch_tick,
+                    query or location_id)], self.b.l5_callbacks),
             "pov_blindspots": epistemic["suspected"],   # điều POV chỉ NGHI
         }
 
