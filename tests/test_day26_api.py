@@ -145,6 +145,20 @@ def test_loi_trong_callback_khong_giet_chuong_dang_viet(tmp_path):
     assert ra["so_canh"] == 6
 
 
+def test_viet_chuong_ghi_file_khi_duoc_yeu_cau(tmp_path):
+    """`chapters_dir` là tuỳ chọn (mặc định `None` — không đụng đĩa gì cả).
+    Truyền vào thì một giao diện viết-rồi-đọc-ngay không phải tự lặp lại
+    logic render markdown của `cli.py`."""
+    db = str(tmp_path / "c.db")
+    ch_dir = tmp_path / "chapters"
+    api.viet_chuong(db, 1, "fake", chapters_dir=ch_dir)
+
+    doc = api.doc_chuong(db, 1, ch_dir)
+    assert doc["ton_tai"] is True
+    assert doc["scenes"] and doc["scenes"][0]["prose"]
+    assert (ch_dir / "ch001.md").exists()
+
+
 def test_viet_de_phai_hoi_truoc(tmp_path):
     """Viết đè là thao tác PHÁ HUỶ — nó xoá frame, digest và delta của bản cũ.
     Giao diện phải hỏi, y như CLI bắt `--force`."""
