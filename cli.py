@@ -35,6 +35,7 @@ from novel_engine.audit.deterministic import (
     audit_contract, audit_stats, deterministic_audit,
 )
 from novel_engine.llm.env import load_dotenv
+from novel_engine.render import render_chapter_markdown as _render_markdown
 
 DB_PATH = "novel_storage.db"
 OUT_CHAPTERS = Path("output/chapters")
@@ -45,13 +46,6 @@ def _llm(name: str, writer_model: str = ""):
     from novel_engine.llm.gemini import build_llm
     kw = {"role_models": {"writer": writer_model}} if writer_model else {}
     return build_llm(name, **kw)
-
-
-def _render_markdown(eng, chapter: int, scene_outputs: list[dict]) -> str:
-    parts = [f"# Chương {chapter} — {eng.planner.title(chapter)}", ""]
-    for i, s in enumerate(scene_outputs):
-        parts += [f"## Cảnh {i}", "", s["prose"].strip(), ""]
-    return "\n".join(parts)
 
 
 def _render_blocked(b: dict) -> str:
@@ -694,6 +688,14 @@ def cmd_show(args) -> int:
     return 0
 
 
+def cmd_serve(args) -> int:
+    import uvicorn
+    from novel_engine.web import create_app
+
+    uvicorn.run(create_app(default_db=args.db), host=args.host, port=args.port)
+    return 0
+
+
 def main(argv=None) -> int:
     load_dotenv()
     ap = argparse.ArgumentParser(prog="cli.py", description="Novel Engine v2.5")
@@ -757,6 +759,12 @@ def main(argv=None) -> int:
     rd.add_argument("--to", dest="den", type=int)
     rd.add_argument("--db", default=DB_PATH)
     rd.set_defaults(func=cmd_report_debt)
+
+    sv = sub.add_parser("serve", help="chạy giao diện web Xưởng viết")
+    sv.add_argument("--db", default=DB_PATH)
+    sv.add_argument("--host", default="127.0.0.1")
+    sv.add_argument("--port", type=int, default=8000)
+    sv.set_defaults(func=cmd_serve)
 
     args = ap.parse_args(argv)
     if getattr(args, "llm", None) is None:

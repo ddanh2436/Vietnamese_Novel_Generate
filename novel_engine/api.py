@@ -189,12 +189,20 @@ def cham_diem(db: str = DB_MAC_DINH, tu: int = 1, den: int | None = None,
 # ═══════════════════════ GHI ═══════════════════════
 
 def viet_chuong(db: str = DB_MAC_DINH, chapter: int = 1, llm: str = "fake", *,
-                force: bool = False, on_event=None) -> dict:
+                force: bool = False, on_event=None,
+                chapters_dir: Path | str | None = None) -> dict:
     """Viết một chương. `on_event` nhận tiến độ từng bước (xem `run_chapter`).
 
     Ném `FileExistsError` nếu chương đã có mà không `force` — giao diện phải
     HỎI trước khi xoá, y như CLI làm. Viết đè là thao tác phá huỷ: nó xoá
     frame, digest và delta của bản cũ.
+
+    `chapters_dir`: `None` (mặc định) là KHÔNG ghi file gì cả — canon store là
+    nguồn sự thật duy nhất được đụng tới. Truyền một thư mục thì hàm ghi thêm
+    file markdown ở đó, cùng định dạng mà `doc_chuong` đọc lại — để một giao
+    diện có thể viết rồi hiển thị ngay mà không cần tự lặp lại logic render
+    của `cli.py`. Không bắt buộc: nhiều giao diện có thể chỉ cần canon, không
+    cần file trên đĩa.
     """
     eng = _eng(db, llm)
     if eng.store.has_chapter(chapter):
@@ -207,6 +215,14 @@ def viet_chuong(db: str = DB_MAC_DINH, chapter: int = 1, llm: str = "fake", *,
 
     st = run_chapter(eng, chapter, on_event=on_event)
     canh = st.get("scene_outputs") or []
+
+    if chapters_dir is not None and not st.get("escalation_reason"):
+        from novel_engine.render import render_chapter_markdown
+        thu_muc = Path(chapters_dir)
+        thu_muc.mkdir(parents=True, exist_ok=True)
+        md = render_chapter_markdown(eng, chapter, canh)
+        (thu_muc / f"ch{chapter:03d}.md").write_text(md, encoding="utf-8")
+
     return {
         "chapter": chapter,
         "escalated": bool(st.get("escalation_reason")),

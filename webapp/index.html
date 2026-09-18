@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Novel Engine — Xưởng viết</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Lora:wght@500;600;700&family=Be+Vietnam+Pro:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div id="app" class="studio">
+
+  <!-- Cột trái: danh sách chương -->
+  <aside class="rail">
+    <div class="rail-head">
+      <div class="eyebrow">Chương</div>
+      <button id="btn-settings" class="icon-btn" title="Cài đặt dự án" aria-label="Cài đặt dự án">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      </button>
+    </div>
+
+    <div id="project-summary" class="project-summary"></div>
+
+    <div id="chapter-list" class="chapter-list">
+      <div class="muted small" style="padding:12px;">Đang tải…</div>
+    </div>
+  </aside>
+
+  <!-- Giữa: văn xuôi -->
+  <main class="prose-pane">
+    <div id="chapter-header" class="chapter-header"></div>
+    <div id="progress-banner" class="progress-banner" hidden></div>
+    <div id="chapter-body" class="chapter-body">
+      <div class="muted">Chọn một chương ở cột trái.</div>
+    </div>
+  </main>
+
+  <!-- Phải: ngữ cảnh -->
+  <aside class="context-panel">
+    <div class="tabs" role="tablist">
+      <button class="tab" data-tab="lien-tuc" role="tab">Liên tục</button>
+      <button class="tab active" data-tab="nhan-vat" role="tab">Nhân vật</button>
+      <button class="tab" data-tab="manh-moi" role="tab">Manh mối</button>
+    </div>
+    <div id="tab-lien-tuc" class="tab-panel"></div>
+    <div id="tab-nhan-vat" class="tab-panel active"></div>
+    <div id="tab-manh-moi" class="tab-panel"></div>
+  </aside>
+
+</div>
+
+<!-- Modal cài đặt dự án -->
+<div id="settings-modal" class="modal" hidden>
+  <div class="modal-card">
+    <div class="modal-title">Cài đặt dự án</div>
+    <label class="field">
+      <span>Đường dẫn canon store (--db)</span>
+      <input id="input-db" type="text" placeholder="novel_storage.db">
+    </label>
+    <label class="field">
+      <span>Backend LLM khi viết chương</span>
+      <select id="input-llm">
+        <option value="fake">fake — miễn phí, tất định (mặc định)</option>
+        <option value="gemini">gemini — cần GEMINI_API_KEY</option>
+      </select>
+    </label>
+    <div class="modal-actions">
+      <button id="btn-settings-cancel" class="btn btn-ghost">Đóng</button>
+      <button id="btn-settings-save" class="btn btn-primary">Lưu</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal chỉnh giọng -->
+<div id="voice-modal" class="modal" hidden>
+  <div class="modal-card">
+    <div class="modal-title">Chỉnh giọng — <span id="voice-char-name"></span></div>
+    <label class="field">
+      <span>register</span>
+      <input id="voice-register" type="text">
+    </label>
+    <label class="field">
+      <span>voice_exemplars (mỗi câu một dòng)</span>
+      <textarea id="voice-exemplars" rows="4"></textarea>
+    </label>
+    <label class="field">
+      <span>forbidden_lexicon (phân cách bằng dấu phẩy)</span>
+      <textarea id="voice-forbidden" rows="2"></textarea>
+    </label>
+    <div id="voice-error" class="voice-error" hidden></div>
+    <div class="modal-actions">
+      <button id="btn-voice-cancel" class="btn btn-ghost">Huỷ</button>
+      <button id="btn-voice-save" class="btn btn-primary">Ghi vào bible</button>
+    </div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
